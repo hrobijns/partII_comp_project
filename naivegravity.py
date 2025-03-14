@@ -1,17 +1,12 @@
-#################################################################################
-# import the necessary libraries, and define relevant constants
-
 import numpy as np
 import matplotlib.pyplot as plt
-import itertools
 from matplotlib.animation import FuncAnimation
+import itertools
 
 G = 6.67430e-11  # gravitational constant
-mass = 5e26 # masses of the body (on the order of the mass of venus)
-dt = 3600 # time step (day)
-
-#################################################################################
-# the direct/naive approach to the n-body gravitational problem, O(n^2)
+mass = 5e26  # masses of the body (on the order of the mass of Venus)
+dt = 3600  # time step (seconds)
+theta = 0.5  # Barnes-Hut opening angle criterion
 
 class Body:
     def __init__(self, position, velocity, mass):
@@ -20,64 +15,144 @@ class Body:
         self.mass = mass
         self.force = np.array([0.0, 0.0])  # 2D force vector
 
-    def pairwise_force(self, other):
-        assert self is not other
-        diff_vector = other.position - self.position
-        distance = np.linalg.norm(diff_vector)
-        assert np.abs(distance) > 6e6, 'Bodies collided!'
-        f_mag = G * self.mass * other.mass / (distance**2)
-        f = f_mag * diff_vector / np.linalg.norm(diff_vector)  # Only 2D forces
-        return f
+class QuadTreeNode:
+    def __init__(self, x_min, x_max, y_min, y_max):
+        self.x_min = x_min
+        self.x_max = x_max
+        self.y_min = y_min
+        self.y_max = y_max
+        self.center_of_mass = np.array([0.0, 0.0])
+        self.mass = 0.0
+        self.body = None  # To store one body if this is a leaf node
+        self.children = []  # Stores child nodes if this is an internal node
+
+    def is_leaf(self):
+        return len(self.children) == 0
+
+    def insert(self, body):
+        if self.is_leaf():
+            if self.body is None:
+                self.body = body
+                self.mass = body.mass
+                self.center_of_mass = body.position * body.mass
+            else:
+                # Split into four children if the node contains more than one body
+                self.subdivide()
+                self.insert(self.body)  # Reinsert the existing body
+                self.body = None  # No longer a leaf
+                self.insert(body)
+        else:
+            # Insert body into appropriate child node
+            for child in self.children:
+                if child.contains(body.position):
+                    child.insert(body)
+                    break
+        
+        # Update the center of mass and mass of the current node
+        self.update_com()
+
+    def subdivide(self):
+        # Create 4 sub-nodes for a 2D quadtree (in a rectangular region)
+        mid_x = (self.x_min + self.x_max) / 2
+        mid_y = (self.y_min + self.y_max) / 2
+        self.children = [
+            QuadTreeNode(self.x_min, mid_x, self.y_min, mid_y),  # Bottom-left
+            QuadTreeNode(mid_x, self.x_max, self.y_min, mid_y),  # Bottom-right
+            QuadTreeNode(self.x_min, mid_x, mid_y, self.y_max),  # Top-left
+            QuadTreeNode(mid_x, self.x_max, mid_y, self.y_max)   # Top-right
+        ]
     
-    def total_energy(bodies):
-        total_kinetic = sum(0.5 * body.mass * np.linalg.norm(body.velocity)**2 for body in bodies)
-        total_potential = 0
-        for b1, b2 in itertools.combinations(bodies, 2):
-            distance = np.linalg.norm(b2.position - b1.position)
-            total_potential -= G * b1.mass * b2.mass / distance
-        return total_kinetic + total_potential
-    
-    def move(bodies):
-        pairs = itertools.combinations(bodies, 2)
-        # initialize force vectors
-        for b in bodies:
-            b.force = np.array([0.0, 0.0])  # 2D force vector
-        # calculate force vectors
-        for b1, b2 in pairs:
-            f = b1.pairwise_force(b2)
-            b1.force += f
-            b2.force -= f
-        # update velocities based on force, update positions based on velocity
-        for body in bodies:
+    def contains(self, position):
+        return (self.x_min <= position[0] < self.x_max and
+                self.y_min <= position[1] < self.y_max)
+
+    def update_com(self):
+        # Update the center of mass of this node
+        if self.body is not None:
+            self.center_of_mass = self.body.position * self.body.mass
+            self.mass = self.body.mass
+        else:
+            total_mass = 0
+            weighted_position = np.array([0.0, 0.0])
+            for child in self.children:
+                total_mass += child.mass
+                weighted_position += child.center_of_mass
+            self.mass = total_mass
+            self.center_of_mass = weighted_position / total_mass
+
+    def calculate_force(self, body, theta):
+        # Compute the force on a body due to the node (or a child)
+        if self.is_leaf():
+            if self.body is not body:
+                return self.calculate_pairwise_force(body, self.body)
+            else:
+                return np.array([0.0, 0.0])
+        else:
+            distance = np.linalg.norm(body.position - self.center_of_mass)
+            size = max(self.x_max - self.x_min, self.y_max - self.y_min)
+            if size / distance < theta:
+                # Treat this node as a single body
+                return self.calculate_pairwise_force(body, self)
+            else:
+                # Otherwise, recurse through the children
+                total_force = np.array([0.0, 0.0])
+                for child in self.children:
+                    total_force += child.calculate_force(body, theta)
+                return total_force
+
+    def calculate_pairwise_force(self, body1, body2):
+        # Calculate the force between two bodies or body and node
+        if isinstance(body2, QuadTreeNode):
+            diff_vector = body1.position - body2.center_of_mass
+            distance = np.linalg.norm(diff_vector)
+            if np.abs(distance) > 6e6:  # Prevent division by zero or small distance
+                f_mag = G * body1.mass * body2.mass / (distance**2)
+                f = f_mag * diff_vector / np.linalg.norm(diff_vector)
+                return f
+            else:
+                return np.array([0.0, 0.0])  # No force if too close
+        else:
+            diff_vector = body1.position - body2.position
+            distance = np.linalg.norm(diff_vector)
+            if np.abs(distance) > 6e6:  # Prevent division by zero or small distance
+                f_mag = G * body1.mass * body2.mass / (distance**2)
+                f = f_mag * diff_vector / np.linalg.norm(diff_vector)
+                return f
+            else:
+                return np.array([0.0, 0.0])  # No force if too close
+
+class Simulation:
+    def __init__(self, bodies, x_min, x_max, y_min, y_max):
+        self.bodies = bodies
+        self.root = QuadTreeNode(x_min, x_max, y_min, y_max)
+
+    def build_tree(self):
+        for body in self.bodies:
+            self.root.insert(body)
+
+    def move(self):
+        # Calculate forces and update positions
+        for body in self.bodies:
+            force = np.array([0.0, 0.0])
+            force_due_to_nodes = self.root.calculate_force(body, theta)
+            body.force += force_due_to_nodes
+
+        # Update velocities and positions
+        for body in self.bodies:
             body.velocity += body.force / body.mass * dt
             body.position += body.velocity * dt
 
-#################################################################################
-# create an animation, with a plot of energy            
-
 class Animation:
-    def __init__(self, bodies, steps=100, interval=50):
+    def __init__(self, bodies, simulation, steps=100, interval=50):
         self.bodies = bodies
+        self.simulation = simulation
         self.steps = steps
         self.interval = interval
-        self.fig, (self.ax, self.ax_energy) = plt.subplots(1, 2, figsize=(12, 6))
+        self.fig, self.ax = plt.subplots(1, 1, figsize=(6, 6))
         self.ax.set_facecolor('black')
         self.ax.set_xlim(-1e11, 1e11)
         self.ax.set_ylim(-1e11, 1e11)
         self.scatters = [self.ax.plot([], [], 'wo', markersize=2)[0] for _ in bodies]
-        
-        self.energy_data = []  # to store the total energy over time
-        self.time_data = []    # to store the time steps
-
-        # initialize the energy plot with a line object (this will be updated)
-        self.energy_line, = self.ax_energy.plot([], [], color='blue')
-        self.ax_energy.set_title("Total Energy Over Time")
-        self.ax_energy.set_xlabel("Time (days)")
-        self.ax_energy.set_ylabel("Total Energy (J)")
-
-        # initial limits for the energy plot
-        self.ax_energy.set_xlim(0, self.steps * dt)
-        self.ax_energy.set_ylim(1e33, 2e33)  # initial limits, will be updated dynamically
 
         # removing axes for the animation plot
         self.ax.set_xticks([])  
@@ -85,37 +160,20 @@ class Animation:
         self.ax.set_xlabel('')  
         self.ax.set_ylabel('') 
 
-        self.ani = FuncAnimation(self.fig, self.update, frames=99999, interval=self.interval, repeat=True)
-
-        self.energy_min = float('inf')
-        self.energy_max = float('-inf')
+        self.ani = FuncAnimation(self.fig, self.update, frames=self.steps, interval=self.interval, repeat=True)
 
     def update(self, frame):
-        Body.move(self.bodies)
+        self.simulation.move()  # Update positions and forces
         for scatter, body in zip(self.scatters, self.bodies):
             scatter.set_data(body.position[0], body.position[1])
         
-        # update energy plot
-        total_energy = Body.total_energy(self.bodies)
-        self.energy_data.append(total_energy)
-        self.time_data.append(frame * dt)
-
-        self.energy_min = min(self.energy_min, total_energy)
-        self.energy_max = max(self.energy_max, total_energy)
-
-        self.energy_line.set_data(self.time_data, self.energy_data)
-        self.ax_energy.set_ylim(self.energy_min * 1.1, self.energy_max * 1.1)  
-        self.ax_energy.set_xlim(0, frame * dt)  # extend x-axis as time progresses
-        
-        return self.scatters, self.energy_line
+        return self.scatters
     
     def show(self):
         plt.show()
 
-#################################################################################
-# simulate, and plot the force calculations as a function of n (number of bodies)
-
-np.random.seed(56)
+# Example usage:
+np.random.seed(42)
 bodies = [
     Body(
         position=np.random.uniform(-1e11, 1e11, 2),
@@ -124,5 +182,7 @@ bodies = [
     ) for _ in range(100)
 ]
 
-anim = Animation(bodies)
+simulation = Simulation(bodies, -1e11, 1e11, -1e11, 1e11)
+simulation.build_tree()
+anim = Animation(bodies, simulation)
 anim.show()
