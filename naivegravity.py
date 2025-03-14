@@ -52,6 +52,9 @@ class Body:
             body.velocity += body.force / body.mass * dt
             body.position += body.velocity * dt
 
+#################################################################################
+# create an animation, with a plot of energy            
+
 class Animation:
     def __init__(self, bodies, steps=100, interval=50):
         self.bodies = bodies
@@ -63,8 +66,8 @@ class Animation:
         self.ax.set_ylim(-1e11, 1e11)
         self.scatters = [self.ax.plot([], [], 'wo', markersize=2)[0] for _ in bodies]
         
-        self.energy_data = []  # To store the total energy over time
-        self.time_data = []    # To store the time steps
+        self.energy_data = []  # to store the total energy over time
+        self.time_data = []    # to store the time steps
 
         # initialize the energy plot with a line object (this will be updated)
         self.energy_line, = self.ax_energy.plot([], [], color='blue')
@@ -72,19 +75,18 @@ class Animation:
         self.ax_energy.set_xlabel("Time (days)")
         self.ax_energy.set_ylabel("Total Energy (J)")
 
-        # Initial limits for the energy plot
+        # initial limits for the energy plot
         self.ax_energy.set_xlim(0, self.steps * dt)
         self.ax_energy.set_ylim(1e33, 2e33)  # initial limits, will be updated dynamically
 
-        # Turn off the axes for the animation plot
-        self.ax.set_xticks([])  # Remove x-axis ticks
-        self.ax.set_yticks([])  # Remove y-axis ticks
-        self.ax.set_xlabel('')  # Remove x-axis label
-        self.ax.set_ylabel('')  # Remove y-axis label
+        # removing axes for the animation plot
+        self.ax.set_xticks([])  
+        self.ax.set_yticks([]) 
+        self.ax.set_xlabel('')  
+        self.ax.set_ylabel('') 
 
         self.ani = FuncAnimation(self.fig, self.update, frames=99999, interval=self.interval, repeat=True)
 
-        # Track min and max energy for dynamic y-limits
         self.energy_min = float('inf')
         self.energy_max = float('-inf')
 
@@ -93,23 +95,17 @@ class Animation:
         for scatter, body in zip(self.scatters, self.bodies):
             scatter.set_data(body.position[0], body.position[1])
         
-        # Track the total energy at each frame
+        # update energy plot
         total_energy = Body.total_energy(self.bodies)
         self.energy_data.append(total_energy)
         self.time_data.append(frame * dt)
 
-        # Update the min and max energy values for dynamic y-limits
         self.energy_min = min(self.energy_min, total_energy)
         self.energy_max = max(self.energy_max, total_energy)
 
-        # Update the energy plot by changing the data of the existing line
         self.energy_line.set_data(self.time_data, self.energy_data)
-
-        # Dynamically adjust the y-axis limits based on the energy data
-        self.ax_energy.set_ylim(self.energy_min * 1.1, self.energy_max * 1.1)  # Add a 10% buffer
-
-        # Dynamically extend the x-axis to keep up with the simulation time
-        self.ax_energy.set_xlim(0, frame * dt)  # Extend x-axis as time progresses
+        self.ax_energy.set_ylim(self.energy_min * 1.1, self.energy_max * 1.1)  
+        self.ax_energy.set_xlim(0, frame * dt)  # extend x-axis as time progresses
         
         return self.scatters, self.energy_line
     
@@ -130,4 +126,3 @@ bodies = [
 
 anim = Animation(bodies)
 anim.show()
-
