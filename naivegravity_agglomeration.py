@@ -11,6 +11,7 @@ class Body:
         self.velocity = np.array(velocity, dtype=float)
         self.mass = mass
         self.force = np.array([0.0, 0.0])
+        self.radius = (self.mass / 1e27) * 1e8  # Approximate radius scaling
 
 class Simulation:
     def __init__(self, bodies):
@@ -30,11 +31,29 @@ class Simulation:
                         f = f_mag * diff_vector / distance
                         body1.force += f
 
+    def merge_bodies(self):
+        merged_bodies = []
+        while self.bodies:
+            body = self.bodies.pop()
+            for other in self.bodies[:]:
+                distance = np.linalg.norm(body.position - other.position)
+                if distance < (body.radius + other.radius):  # Merge if within radius
+                    new_mass = body.mass + other.mass
+                    new_position = (body.position * body.mass + other.position * other.mass) / new_mass
+                    new_velocity = (body.velocity * body.mass + other.velocity * other.mass) / new_mass
+                    merged_bodies.append(Body(new_position, new_velocity, new_mass))
+                    self.bodies.remove(other)
+                    break
+            else:
+                merged_bodies.append(body)
+        self.bodies = merged_bodies
+
     def move(self):
         self.compute_forces()
         for body in self.bodies:
             body.velocity += body.force / body.mass * dt
             body.position += body.velocity * dt
+        self.merge_bodies()
 
 class Animation:
     def __init__(self, bodies, simulation, steps=100, interval=50):
@@ -53,8 +72,14 @@ class Animation:
     
     def update(self, frame):
         self.simulation.move()
-        for scatter, body in zip(self.scatters, self.bodies):
-            scatter.set_data(body.position[0], body.position[1])
+        self.scatters = []
+        self.ax.clear()
+        self.ax.set_facecolor('black')
+        self.ax.set_xlim(-1e11, 1e11)
+        self.ax.set_ylim(-1e11, 1e11)
+        for body in self.simulation.bodies:
+            scatter, = self.ax.plot(body.position[0], body.position[1], 'wo', markersize=(body.mass)/1e27)
+            self.scatters.append(scatter)
         return self.scatters
     
     def show(self):
