@@ -61,12 +61,12 @@ class Animation:
         plt.show()
 
 # Example usage:
-np.random.seed(42)
+np.random.seed(28)
 bodies = [
     Body(
         position=np.random.uniform(-1e11, 1e11, 2),
         velocity=np.random.uniform(-3e3, 3e3, 2),
-        mass=np.random.uniform(5e26, 5e27)  # Mass varies by an order of magnitude
+        mass=np.random.uniform(5e26, 5e27)  
     ) for _ in range(100)
 ]
 
