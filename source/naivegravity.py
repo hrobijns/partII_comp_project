@@ -2,18 +2,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-# note that units are in terms of AU (distance), day (time) and solar mass (mass)
+# note that units are in terms of AU (distance), day (time) and solar mass (M_sun, mass)
 G = 2.959122082855911e-4  # gravitational constant in AU^3 M_sun^-1 day^-2
-dt = 1/24  # Time step in days (for simplicity, 1 day per update)
+dt = 1/24  # time step (in units of days, e.g. 1/24 is equivalent to steps of an hour)
 
 
 class Body:
-    """Represents a celestial body with position, velocity, and mass."""
+    """Represents a celestial body with position, velocity, mass and net force."""
     def __init__(self, position, velocity, mass):
         self.position = np.array(position, dtype=float)  # in AU
         self.velocity = np.array(velocity, dtype=float)  # in AU/day
         self.mass = mass  # in solar masses (M_sun)
-        self.force = np.zeros(2)  # in AU/day^2
+        self.force = np.zeros(2)  # in AU/day^2, initialised to zero
 
 
 class Simulation:
@@ -22,11 +22,11 @@ class Simulation:
         self.bodies = bodies
 
     def compute_forces(self):
-        """Computes gravitational forces between all bodies."""
-        e = 1e-2 # a small parameter to avoid singularities (here, 0.01 AU)
+        """Naively computes pair-wise gravitational forces between all bodies."""
+        e = 1e-2 # a small softening parameter to avoid divergences at small distances
         
         for body in self.bodies:
-            body.force = np.zeros(2)
+            body.force = np.zeros(2) # clear previous force calculation
 
         for i, body1 in enumerate(self.bodies):
             for j, body2 in enumerate(self.bodies):
@@ -40,19 +40,17 @@ class Simulation:
 
     def move(self):
         """Updates the position and velocity of all bodies using leapfrog integration."""
-        # Half-step velocity update (we'll update the velocity after position update)
         for body in self.bodies:
-            body.position += body.velocity * dt  # Update position
+            body.position += body.velocity * dt  # update position
         
-        self.compute_forces()  # Compute new forces after updating the positions
+        self.compute_forces()  # compute new forces after updating the positions
         
-        # Full-step velocity update
         for body in self.bodies:
-            body.velocity += (body.force / body.mass) * dt  # Update velocity
+            body.velocity += (body.force / body.mass) * dt  # update velocity
 
 
 class Animation:
-    """Handles visualization of the simulation using Matplotlib."""
+    """Handles visualization and formatting of the simulation using Matplotlib."""
     def __init__(self, bodies, simulation, steps=100, interval=50):
         self.bodies = bodies
         self.simulation = simulation
@@ -61,14 +59,14 @@ class Animation:
 
         self.fig, self.ax = plt.subplots(figsize=(6, 6))
         self.ax.set_facecolor("black")
-        self.ax.set_xlim(-2, 2)  # AU
-        self.ax.set_ylim(-2, 2)  # AU
+        self.ax.set_xlim(-2, 2)  # in AU
+        self.ax.set_ylim(-2, 2)  # in AU
         self.ax.set_xticks([])
         self.ax.set_yticks([])
 
-        # Create scatter plots for each body
+        # create a scatter point for each body (size scaled by mass)
         self.scatters = [
-            self.ax.plot([], [], "wo", markersize=body.mass * 2)[0]  # Scale size for visualization
+            self.ax.plot([], [], "wo", markersize=body.mass * 2)[0] 
             for body in bodies
         ]
 
@@ -84,11 +82,10 @@ class Animation:
         return self.scatters
 
     def show(self):
-        """Displays the animation."""
         plt.show()
 
+###############################################################################################
 
-# Example usage
 if __name__ == "__main__":
     np.random.seed(28)
     bodies = [
@@ -97,7 +94,7 @@ if __name__ == "__main__":
             velocity=np.random.uniform(-0.05, 0.05, 2),  # in AU/day
             mass=np.random.uniform(0.1, 1),  # in M_sun
         )
-        for _ in range(100)
+        for _ in range(3)
     ]
 
     simulation = Simulation(bodies)
