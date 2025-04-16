@@ -85,14 +85,14 @@ class Animation:
 ###############################################################################################
 
 if __name__ == "__main__":
-    np.random.seed(28)
+    np.random.seed(42)
     bodies = [
         Body(
             position=np.random.uniform(-2, 2, 2),  # in AU
             velocity=np.random.uniform(-0.05, 0.05, 2),  # in AU/day
             mass=np.random.uniform(0.1, 1),  # in M_sun
         )
-        for _ in range(3)
+        for _ in range(10)
     ]
 
     simulation = Simulation(bodies)

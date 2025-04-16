@@ -89,9 +89,10 @@ class QuadTree:
 
 class Simulation:
     """Simulates the physics using a quadtree and BH approximation"""
-    def __init__(self, bodies, space_size):
+    def __init__(self, bodies, space_size, theta):
         self.bodies = bodies
         self.space_size = space_size
+        self.theta = theta
     
     def compute_forces(self):
         root = QuadTree(-self.space_size, self.space_size, -self.space_size, 
@@ -99,7 +100,7 @@ class Simulation:
         for body in self.bodies:
             root.insert(body)
         for body in self.bodies:
-            body.force = root.compute_force(body, theta)
+            body.force = root.compute_force(body, self.theta)
     
     def move(self):
         """Updates the position and velocity of all bodies using leapfrog integration."""
