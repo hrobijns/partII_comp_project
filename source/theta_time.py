@@ -34,11 +34,11 @@ def benchmark_thetas(theta_values, steps=10, n_bodies=100):
     return times
 
 if __name__ == "__main__":
-    theta_values = np.linspace(0.1, 1.5, 15)
+    theta_values = np.linspace(0.1, 1, 10)
     times = benchmark_thetas(theta_values, steps=20, n_bodies=200)
 
     plt.figure(figsize=(8, 5))
-    plt.plot(theta_values, times, marker='o')
+    plt.plot(theta_values**(-1/2), times, marker='o')
     plt.xlabel('Theta (Barnes-Hut opening angle)')
     plt.ylabel('Time (seconds for 20 steps)')
     plt.title('Simulation Time vs. Theta')
