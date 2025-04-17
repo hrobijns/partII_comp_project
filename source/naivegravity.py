@@ -21,7 +21,7 @@ class Simulation:
     def __init__(self, bodies):
         self.bodies = bodies
 
-    def compute_forces(self, e = 1e-2) :
+    def compute_forces(self, e = 1e-1) :
         """Naively computes pair-wise gravitational forces between all bodies."""        
         for body in self.bodies:
             body.force = np.zeros(2) # clear previous force calculation
@@ -32,19 +32,19 @@ class Simulation:
                     diff_vector = body2.position - body1.position
                     distance = np.linalg.norm(diff_vector)
                     
-                    force_magnitude = G * body1.mass * body2.mass / (distance + e) **2
+                    force_magnitude = G * body1.mass * body2.mass / (distance**2 + e**2)
                     force_vector = force_magnitude * diff_vector / distance
                     body1.force += force_vector
 
     def move(self):
-        """Updates the position and velocity of all bodies using leapfrog integration."""
         for body in self.bodies:
-            body.position += body.velocity * dt  # update position
-        
-        self.compute_forces()  # compute new forces after updating the positions
-        
+            body.velocity += 0.5 * (body.force / body.mass) * dt
+            body.position += body.velocity * dt
+
+        self.compute_forces()
+
         for body in self.bodies:
-            body.velocity += (body.force / body.mass) * dt  # update velocity
+            body.velocity += 0.5 * (body.force / body.mass) * dt
 
 
 class Animation:

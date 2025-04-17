@@ -6,6 +6,7 @@ from matplotlib.animation import FuncAnimation
 G = 2.959122082855911e-4  # gravitational constant in AU^3 M_sun^-1 day^-2
 dt = 1/24  # time step (in units of days, e.g. 1/24 is equivalent to steps of an hour)
 theta = 0.5  # Barnes-Hut parameter
+e = 1e-1
 
 
 class Body:
@@ -78,7 +79,7 @@ class QuadTree:
         width = self.x_max - self.x_min
         
         if width / distance < theta or not self.children:
-            force_magnitude = G * body.mass * self.total_mass / (distance**2 + 1e-2)
+            force_magnitude = G * body.mass * self.total_mass / (distance**2 + e**2)
             return force_magnitude * np.array([dx, dy]) / distance
         
         total_force = np.array([0.0, 0.0])
@@ -93,6 +94,7 @@ class Simulation:
         self.bodies = bodies
         self.space_size = space_size
         self.theta = theta
+        self.compute_forces()
     
     def compute_forces(self):
         root = QuadTree(-self.space_size, self.space_size, -self.space_size, 
@@ -103,14 +105,14 @@ class Simulation:
             body.force = root.compute_force(body, self.theta)
     
     def move(self):
-        """Updates the position and velocity of all bodies using leapfrog integration."""
         for body in self.bodies:
-            body.position += body.velocity * dt  
-        
-        self.compute_forces()  
-        
+            body.velocity += 0.5 * (body.force / body.mass) * dt
+            body.position += body.velocity * dt
+
+        self.compute_forces()
+
         for body in self.bodies:
-            body.velocity += (body.force / body.mass) * dt  
+            body.velocity += 0.5 * (body.force / body.mass) * dt
 
 class Animation:
     """Handles visualization and formatting of the simulation using Matplotlib."""
