@@ -151,7 +151,7 @@ if __name__ == "__main__":
             velocity=np.random.uniform(-0.05, 0.05, 2),  # in AU/day
             mass=np.random.uniform(0.1, 1),  # in M_sun
         )
-        for _ in range(100)
+        for _ in range(20)
     ]
 
     simulation = Simulation(bodies, space_size=2e11)
