@@ -3,11 +3,10 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from mpl_toolkits.mplot3d import Axes3D
 
-G = 2.959122082855911e-4  # AU^3 M_sun^-1 day^-2
-dt = 1/24
-theta = 0.5
-e = 1e-1
-
+G = 6.67430e-11  # Gravitational constant
+dt = 3600  # Time step in seconds
+THETA = 0.5  # Multipole acceptance criterion
+EPSILON = 1e-3  # Softening parameter to avoid singularities
 
 class Body:
     def __init__(self, position, velocity, mass):
@@ -15,7 +14,6 @@ class Body:
         self.velocity = np.array(velocity, dtype=float)
         self.mass = mass
         self.force = np.zeros(3)
-
 
 class Octree:
     def __init__(self, x_min, x_max, y_min, y_max, z_min, z_max):
@@ -26,8 +24,8 @@ class Octree:
         self.children = None
 
     def contains(self, position):
-        x_min, x_max, y_min, y_max, z_min, z_max = self.bounds
         x, y, z = position
+        x_min, x_max, y_min, y_max, z_min, z_max = self.bounds
         return (x_min <= x < x_max and y_min <= y < y_max and z_min <= z < z_max)
 
     def insert(self, body):
@@ -54,17 +52,15 @@ class Octree:
         x_mid = (x_min + x_max) / 2
         y_mid = (y_min + y_max) / 2
         z_mid = (z_min + z_max) / 2
+
         self.children = []
-        for dx in [x_min, x_mid]:
-            for dy in [y_min, y_mid]:
-                for dz in [z_min, z_mid]:
+        for dx in [(x_min, x_mid), (x_mid, x_max)]:
+            for dy in [(y_min, y_mid), (y_mid, y_max)]:
+                for dz in [(z_min, z_mid), (z_mid, z_max)]:
                     self.children.append(
-                        Octree(
-                            dx, dx + (x_max - x_min) / 2,
-                            dy, dy + (y_max - y_min) / 2,
-                            dz, dz + (z_max - z_min) / 2
-                        )
+                        Octree(dx[0], dx[1], dy[0], dy[1], dz[0], dz[1])
                     )
+
         for body in self.bodies:
             for child in self.children:
                 if child.contains(body.position):
@@ -72,31 +68,27 @@ class Octree:
                     break
         self.bodies = []
 
-    def compute_force(self, body, theta):
-        if not self.total_mass or (len(self.bodies) == 1 and self.bodies[0] is body):
+    def compute_force(self, body):
+        if self.total_mass == 0 or (len(self.bodies) == 1 and self.bodies[0] is body):
             return np.zeros(3)
 
         dx = self.center_of_mass - body.position
-        distance = np.linalg.norm(dx)
+        distance = np.linalg.norm(dx) + EPSILON
         width = self.bounds[1] - self.bounds[0]
 
-        if width / distance < theta or not self.children:
-            force_mag = G * body.mass * self.total_mass / (distance**2 + e**2)
+        if width / distance < THETA or not self.children:
+            force_mag = G * body.mass * self.total_mass / (distance**2)
             return force_mag * dx / distance
 
         total_force = np.zeros(3)
         for child in self.children:
-            total_force += child.compute_force(body, theta)
+            total_force += child.compute_force(body)
         return total_force
 
-
 class Simulation:
-    def __init__(self, bodies, space_size, theta):
+    def __init__(self, bodies, space_size):
         self.bodies = bodies
         self.space_size = space_size
-        self.theta = theta
-        self.force_count = 0  # <<<<<< ADD THIS
-        self.compute_forces()
 
     def compute_forces(self):
         root = Octree(-self.space_size, self.space_size,
@@ -104,42 +96,15 @@ class Simulation:
                       -self.space_size, self.space_size)
         for body in self.bodies:
             root.insert(body)
-        self.force_count = 0  # <<<<<< RESET COUNTER
+
         for body in self.bodies:
-            body.force = self.compute_force_with_count(root, body)
-
-    def compute_force_with_count(self, root, body):
-        # Wrapper to increment the force count during recursion
-        return self._compute_force_recursive(root, body)
-
-    def _compute_force_recursive(self, node, body):
-        if not node.total_mass or (len(node.bodies) == 1 and node.bodies[0] is body):
-            return np.zeros(3)
-
-        dx = node.center_of_mass - body.position
-        distance = np.linalg.norm(dx)
-        width = node.bounds[1] - node.bounds[0]
-
-        if width / distance < self.theta or not node.children:
-            self.force_count += 1  # <<<<<< INCREMENT force count
-            force_mag = G * body.mass * node.total_mass / (distance**2 + e**2)
-            return force_mag * dx / distance
-
-        total_force = np.zeros(3)
-        for child in node.children:
-            total_force += self._compute_force_recursive(child, body)
-        return total_force
+            body.force = root.compute_force(body)
 
     def move(self):
-        for body in self.bodies:
-            body.velocity += 0.5 * (body.force / body.mass) * dt
-            body.position += body.velocity * dt
-
         self.compute_forces()
-
         for body in self.bodies:
-            body.velocity += 0.5 * (body.force / body.mass) * dt
-
+            body.velocity += body.force / body.mass * dt
+            body.position += body.velocity * dt
 
 class Animation3D:
     def __init__(self, bodies, simulation, steps=100, interval=50):
@@ -151,16 +116,16 @@ class Animation3D:
         self.fig = plt.figure(figsize=(7, 7))
         self.ax = self.fig.add_subplot(111, projection='3d')
         self.ax.set_facecolor('black')
-        self.ax.set_xlim(-2, 2)
-        self.ax.set_ylim(-2, 2)
-        self.ax.set_zlim(-2, 2)
+        self.ax.set_xlim(-1e11, 1e11)
+        self.ax.set_ylim(-1e11, 1e11)
+        self.ax.set_zlim(-1e11, 1e11)
         self.ax.set_xticks([])
         self.ax.set_yticks([])
         self.ax.set_zticks([])
 
         positions = np.array([body.position for body in bodies])
         self.scat = self.ax.scatter(positions[:, 0], positions[:, 1], positions[:, 2],
-                            c='white', s=[body.mass * 10 for body in bodies])
+                                    c='white', s=[body.mass / 1e26 for body in bodies])
         self.ani = FuncAnimation(self.fig, self.update, frames=self.steps,
                                  interval=self.interval, repeat=True)
 
@@ -173,17 +138,16 @@ class Animation3D:
     def show(self):
         plt.show()
 
-
 if __name__ == "__main__":
     np.random.seed(28)
     bodies = [
         Body(
-            position=np.random.uniform(-2, 2, 3),  # 3D position
-            velocity=np.random.uniform(-0.05, 0.05, 3),
-            mass=np.random.uniform(0.1, 1),
-        )
-        for _ in range(100)
+            position=np.random.uniform(-1e11, 1e11, 3),
+            velocity=np.random.uniform(-3e3, 3e3, 3),
+            mass=np.random.uniform(5e26, 5e27)
+        ) for _ in range(100)
     ]
-    simulation = Simulation(bodies, space_size=2, theta=theta)
+
+    simulation = Simulation(bodies, space_size=2e11)
     anim = Animation3D(bodies, simulation)
     anim.show()
