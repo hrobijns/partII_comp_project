@@ -96,7 +96,6 @@ class Simulation:
             body.force = root.compute_force(body, self.theta)
 
     def move(self):
-        print(1)
         for body in self.bodies:
             if body is not self.black_hole:
                 body.velocity += 0.5 * (body.force / body.mass) * dt

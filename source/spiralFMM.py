@@ -33,11 +33,12 @@ class Node:
 
 class Simulation:
     """Handles the physics of the n-body simulation using FMM."""
-    def __init__(self, bodies, max_depth=10, max_particles_per_node=3, theta=0.5):
+    def __init__(self, bodies, black_hole, max_depth=10, max_particles_per_node=3, theta=0.5):
         self.bodies = bodies
         self.max_depth = max_depth
         self.max_particles_per_node = max_particles_per_node
         self.theta = theta
+        self.black_hole = black_hole
         self.root_node = self.build_tree(bodies)
         self.compute_center_of_mass_and_total_mass(self.root_node)
         self.multipole_expansion(self.root_node)
@@ -216,21 +217,25 @@ class Simulation:
 
     def move(self):
         for body in self.bodies:
-            body.velocity += 0.5 * (body.force / body.mass) * dt
-            body.position += body.velocity * dt
+            if body is not self.black_hole:
+                body.velocity += 0.5 * (body.force / body.mass) * dt
+                body.position += body.velocity * dt
+                
 
         self.compute_forces()
 
         for body in self.bodies:
-            body.velocity += 0.5 * (body.force / body.mass) * dt
+            if body is not self.black_hole:
+                body.velocity += 0.5 * (body.force / body.mass) * dt
 
 class Animation:
     """Handles visualization and formatting of the simulation using Matplotlib."""
-    def __init__(self, bodies, simulation, steps=100, interval=50):
+    def __init__(self, bodies, simulation, black_hole, steps=100, interval=50):
         self.bodies = bodies
         self.simulation = simulation
         self.steps = steps
         self.interval = interval
+        self.black_hole = black_hole
 
         self.fig, self.ax = plt.subplots(figsize=(6, 6))
         self.ax.set_facecolor("black")
@@ -241,7 +246,7 @@ class Animation:
 
         # create a scatter point for each body (size scaled by mass)
         self.scatters = [
-            self.ax.plot([], [], "wo", markersize=body.mass * 0.1)[0]
+            self.ax.plot([], [], "wo", markersize=body.mass * 0.5)[0]
             for body in bodies
         ]
 
@@ -251,27 +256,66 @@ class Animation:
 
     def update(self, frame):
         """Updates the animation frame-by-frame."""
+        print(f"Rendering frame {frame + 1}/{self.steps}")
         self.simulation.move()  # Perform one step of the simulation
         for scatter, body in zip(self.scatters, self.bodies):
             scatter.set_data(body.position[0], body.position[1])
         return self.scatters
 
+    def save(self):
+        # Save the animation to the specified output file
+        self.ani.save('figures/spiralFMM.mp4', writer='ffmpeg', dpi=300)
+
     def show(self):
         plt.show()
 
-###############################################################################################
+
+def generate_spiral_galaxy(n_bodies, arms=4, arm_strength=0.7, spread=0.3, radius=1.5):
+    bodies = []
+    for i in range(n_bodies):
+        # Radial distribution, denser near center
+        r = radius * np.random.power(2.5)
+        
+        # Spiral angle: looser connection to radial distance
+        base_theta = r * 4  # logarithmic spiral
+        arm_offset = ((i % arms) / arms) * 2 * np.pi
+        theta_noise = np.random.normal(scale=spread * (1 - arm_strength))
+        theta = base_theta + arm_offset + theta_noise
+        
+        # Add perpendicular noise to spread stars around the arm
+        offset_radius = r + np.random.normal(scale=spread * arm_strength)
+
+        x = offset_radius * np.cos(theta)
+        y = offset_radius * np.sin(theta)
+        position = np.array([x, y])
+
+        # Calculate orbital velocity around center (black hole mass = 100 M_sun)
+        distance = np.linalg.norm(position)
+        speed = np.sqrt(G * 100 / (distance + 0.1))
+        direction = np.array([-position[1], position[0]])  # Perpendicular to position vector
+        direction /= np.linalg.norm(direction)  # Normalize direction
+        velocity = direction * speed  # Apply the velocity magnitude
+
+        # Star mass
+        mass = np.random.uniform(0.05, 0.5)
+        bodies.append(Body(position, velocity, mass))
+    
+    return bodies
+
+
+#####################################################################################################
 
 if __name__ == "__main__":
     np.random.seed(42)
-    bodies = [
-        Body(
-            position=np.random.uniform(-2, 2, 2),  # in AU
-            velocity=np.random.uniform(-0.05, 0.05, 2),  # in AU/day
-            mass=np.random.uniform(0.1, 1),  # in M_sun
-        )
-        for _ in range(1000)
-    ]
 
-    simulation = Simulation(bodies)
-    anim = Animation(bodies, simulation)
+    # Add central black hole
+    black_hole = Body(position=[0, 0], velocity=[0, 0], mass=100.0)
+
+    # Generate spiral galaxy
+    stars = generate_spiral_galaxy(n_bodies=100)
+    bodies = [black_hole] + stars
+
+
+    simulation = Simulation(bodies, black_hole=black_hole)
+    anim = Animation(bodies, simulation, black_hole=black_hole, steps=10, interval=20)
     anim.show()

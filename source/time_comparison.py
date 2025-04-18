@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 import os
 from barneshut import Simulation as BarnesHutSimulation, Body as BarnesHutBody
 from naivegravity import Simulation as NaiveSimulation, Body as NaiveBody
-from FMM import Simulation as FastMultipoleSimulation, Body as FastMultipoleBody
+from FMM import Simulation as FastMultipoleSimulation, Body as FastMultipoleBody  # Importing FMM components from FMM.py
 
 # Constants
 SIMULATION_STEPS = 1
 INTERVAL = 50  # Milliseconds (interval for the animation)
 N_MIN = 10  # Minimum number of bodies
 N_MAX = 1000  # Maximum number of bodies
-NUM_TRIALS = 10  # Number of trials per N for averaging
+NUM_TRIALS = 1  # Number of trials per N for averaging
 
 def run_barnes_hut_simulation(N, seed):
     np.random.seed(seed)
@@ -22,7 +22,7 @@ def run_barnes_hut_simulation(N, seed):
             mass=np.random.uniform(5e26, 5e27)
         ) for _ in range(N)
     ]
-    simulation_barneshut = BarnesHutSimulation(bodies_barneshut, space_size=2e11)
+    simulation_barneshut = BarnesHutSimulation(bodies_barneshut, space_size=2e11, theta=0.5)
     
     start_time = time.time()
     for _ in range(SIMULATION_STEPS):
@@ -51,6 +51,8 @@ def run_naive_simulation(N, seed):
 
 def run_fast_multipole_simulation(N, seed):
     np.random.seed(seed)
+    
+    # Create bodies for the FMM simulation
     bodies_fastmultipole = [
         FastMultipoleBody(
             position=np.random.uniform(-1e11, 1e11, 2),
@@ -58,11 +60,13 @@ def run_fast_multipole_simulation(N, seed):
             mass=np.random.uniform(5e26, 5e27)
         ) for _ in range(N)
     ]
-    simulation_fastmultipole = FastMultipoleSimulation(bodies_fastmultipole, space_size=2e11)
+    
+    # Set up FMM simulation with bodies
+    simulation_fastmultipole = FastMultipoleSimulation(bodies_fastmultipole)
     
     start_time = time.time()
     for _ in range(SIMULATION_STEPS):
-        simulation_fastmultipole.move()
+        simulation_fastmultipole.move()  # Perform a single step in the FMM simulation
     end_time = time.time()
     
     return end_time - start_time
@@ -76,18 +80,26 @@ def compare_computation_times():
     naive_errors = []
     fast_multipole_errors = []
     
+    total_combinations = len(Ns) * NUM_TRIALS  # Total combinations of N and trials
+    progress_step = total_combinations // 20  # Update progress every 5% of the total combinations
+    progress_count = 0
+    
     for N in Ns:
-        print(f"Running simulations for N = {N}")
-        
+        print(f"Running simulations for N = {N}...")
+
         barnes_hut_trial_times = []
         naive_trial_times = []
         fast_multipole_trial_times = []
         
         for i in range(NUM_TRIALS):
-            seed = np.random.seed()
+            seed = np.random.randint(0, 10000)  # Generate a new seed for each trial
             barnes_hut_trial_times.append(run_barnes_hut_simulation(N, seed))
             naive_trial_times.append(run_naive_simulation(N, seed))
             fast_multipole_trial_times.append(run_fast_multipole_simulation(N, seed))
+            
+            progress_count += 1
+            if progress_count % progress_step == 0:
+                print(f"Progress: {100 * progress_count // total_combinations}% completed")
         
         barnes_hut_times.append(np.mean(barnes_hut_trial_times))
         naive_times.append(np.mean(naive_trial_times))
@@ -112,6 +124,7 @@ def compare_computation_times():
     })
     print("Computation times saved to data/computation_times.npy")
     
+    # Plotting the computation times
     plt.figure(figsize=(8, 6))
     plt.errorbar(Ns, barnes_hut_times, yerr=barnes_hut_errors, label='Barnes-Hut Simulation', color='blue', marker='o', markersize=4, capsize=3)
     plt.errorbar(Ns, naive_times, yerr=naive_errors, label='Naïve N-Body Simulation', color='red', marker='s', markersize=4, capsize=3)
