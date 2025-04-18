@@ -2,10 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-G = 6.67430e-11  # Gravitational constant
-dt = 3600  # Time step (seconds)
-THETA = 0.5  # Multipole approximation threshold
-P = 3  # Order of multipole expansion
+G = 6.67430e-11
+dt = 3600
+THETA = 0.5
+P = 2  # Only monopole and dipole for now
 
 class Body:
     def __init__(self, position, velocity, mass):
@@ -18,30 +18,38 @@ class Cell:
     def __init__(self, x_min, x_max, y_min, y_max):
         self.x_min, self.x_max = x_min, x_max
         self.y_min, self.y_max = y_min, y_max
-        self.center_of_mass = np.array([0.0, 0.0])
+        self.center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2])
+        self.center_of_mass = np.zeros(2)
         self.total_mass = 0.0
         self.bodies = []
         self.children = None
-        self.multipole_moments = np.zeros((P, 2))
-    
+        self.multipole = {
+            "monopole": 0.0,
+            "dipole": np.zeros(2)
+        }
+        self.local_expansion = np.zeros(2)
+
+    def contains(self, pos):
+        return self.x_min <= pos[0] < self.x_max and self.y_min <= pos[1] < self.y_max
+
     def insert(self, body):
         if not self.bodies and self.total_mass == 0:
             self.bodies.append(body)
             self.center_of_mass = body.position
             self.total_mass = body.mass
             return
-        
+
         if self.children is None:
             self.subdivide()
-        
+
         self.total_mass += body.mass
         self.center_of_mass = (self.center_of_mass * (self.total_mass - body.mass) + body.position * body.mass) / self.total_mass
-        
+
         for child in self.children:
             if child.contains(body.position):
                 child.insert(body)
                 return
-    
+
     def subdivide(self):
         x_mid = (self.x_min + self.x_max) / 2
         y_mid = (self.y_min + self.y_max) / 2
@@ -57,47 +65,62 @@ class Cell:
                     child.insert(body)
                     break
         self.bodies = []
-    
-    def contains(self, position):
-        return self.x_min <= position[0] < self.x_max and self.y_min <= position[1] < self.y_max
-    
-    def compute_multipole_moments(self):
-        for child in self.children or []:
-            child.compute_multipole_moments()
-            self.multipole_moments += child.multipole_moments
-    
-    def compute_force(self, body):
-        dx, dy = self.center_of_mass - body.position
-        distance = np.sqrt(dx**2 + dy**2) + 1e-10
-        width = self.x_max - self.x_min
-        
-        if width / distance < THETA or not self.children:
-            force_magnitude = G * body.mass * self.total_mass / (distance**2)
-            return force_magnitude * np.array([dx, dy]) / distance
-        
-        total_force = np.array([0.0, 0.0])
-        for child in self.children:
-            total_force += child.compute_force(body)
-        return total_force
+
+    def compute_multipole(self):
+        if self.children:
+            self.multipole["monopole"] = 0.0
+            self.multipole["dipole"] = np.zeros(2)
+            for child in self.children:
+                child.compute_multipole()
+                m = child.multipole["monopole"]
+                d = child.multipole["dipole"]
+                r = child.center - self.center
+                self.multipole["monopole"] += m
+                self.multipole["dipole"] += d + m * r
+        else:
+            m = sum(b.mass for b in self.bodies)
+            d = sum(b.mass * (b.position - self.center) for b in self.bodies)
+            self.multipole["monopole"] = m
+            self.multipole["dipole"] = d
+
+    def apply_fmm_force(self, body, source):
+        r = body.position - source.center
+        dist2 = np.sum(r**2) + 1e-10
+        dist = np.sqrt(dist2)
+        width = source.x_max - source.x_min
+
+        if source.children is None or width / dist < THETA:
+            m = source.multipole["monopole"]
+            d = source.multipole["dipole"]
+            F_monopole = -G * body.mass * m * r / dist2**(1.5)
+            F_dipole = -G * body.mass * (
+                (3 * np.dot(d, r) * r - dist2 * d) / dist2**(2.5)
+            )
+            return F_monopole + F_dipole
+        else:
+            F = np.zeros(2)
+            for child in source.children:
+                F += self.apply_fmm_force(body, child)
+            return F
 
 class Simulation:
     def __init__(self, bodies, space_size):
         self.bodies = bodies
         self.space_size = space_size
-    
+
     def compute_forces(self):
         root = Cell(-self.space_size, self.space_size, -self.space_size, self.space_size)
-        for body in self.bodies:
-            root.insert(body)
-        root.compute_multipole_moments()
-        for body in self.bodies:
-            body.force = root.compute_force(body)
-    
+        for b in self.bodies:
+            root.insert(b)
+        root.compute_multipole()
+        for b in self.bodies:
+            b.force = root.apply_fmm_force(b, root)
+
     def move(self):
         self.compute_forces()
-        for body in self.bodies:
-            body.velocity += body.force / body.mass * dt
-            body.position += body.velocity * dt
+        for b in self.bodies:
+            b.velocity += b.force / b.mass * dt
+            b.position += b.velocity * dt
 
 class Animation:
     def __init__(self, bodies, simulation, steps=100, interval=50):
@@ -109,29 +132,27 @@ class Animation:
         self.ax.set_facecolor('black')
         self.ax.set_xlim(-1e11, 1e11)
         self.ax.set_ylim(-1e11, 1e11)
-        self.scatters = [self.ax.plot([], [], 'wo', markersize=(body.mass)/1e27)[0] for body in bodies]
+        self.scatters = [self.ax.plot([], [], 'wo', markersize=(b.mass)/1e27)[0] for b in bodies]
         self.ax.set_xticks([])
         self.ax.set_yticks([])
         self.ani = FuncAnimation(self.fig, self.update, frames=self.steps, interval=self.interval, repeat=True)
-    
+
     def update(self, frame):
         self.simulation.move()
         for scatter, body in zip(self.scatters, self.bodies):
             scatter.set_data(body.position[0], body.position[1])
         return self.scatters
-    
+
     def show(self):
         plt.show()
 
 # Example usage:
 np.random.seed(28)
-bodies = [
-    Body(
-        position=np.random.uniform(-1e11, 1e11, 2),
-        velocity=np.random.uniform(-3e3, 3e3, 2),
-        mass=np.random.uniform(5e26, 5e27)
-    ) for _ in range(100)
-]
+bodies = [Body(
+    position=np.random.uniform(-1e11, 1e11, 2),
+    velocity=np.random.uniform(-3e3, 3e3, 2),
+    mass=np.random.uniform(5e26, 5e27)
+) for _ in range(100)]
 
 simulation = Simulation(bodies, space_size=2e11)
 anim = Animation(bodies, simulation)

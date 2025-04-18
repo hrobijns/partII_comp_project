@@ -86,7 +86,7 @@ class QuadTree:
         for child in self.children:
             total_force += child.compute_force(body, theta)
         return total_force
-
+    
 
 class Simulation:
     """Simulates the physics using a quadtree and BH approximation"""
