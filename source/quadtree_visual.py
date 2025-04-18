@@ -172,6 +172,6 @@ draw_tree_structure(
     label_offsets=label_offsets
 )
 
-plt.savefig("figures/quadtree_plot.png", dpi=300, bbox_inches='tight')
+#plt.savefig("figures/quadtree_plot.png", dpi=300, bbox_inches='tight')
 plt.tight_layout()
 plt.show()
