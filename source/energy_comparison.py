@@ -6,7 +6,7 @@ from naivegravity import Body, Simulation
 G = 2.959122082855911e-4  # gravitational constant in AU^3 M_sun^-1 day^-2
 dt = 1/24  # Time step in days
 steps = 100
-softening_values = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5]  # Different softening parameters
+softening_values = [0.1]  # Different softening parameters
 
 # Function to compute total energy
 def compute_total_energy(bodies, e):

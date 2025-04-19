@@ -10,7 +10,7 @@ from FMM import Simulation as FastMultipoleSimulation, Body as FastMultipoleBody
 SIMULATION_STEPS = 1
 INTERVAL = 50  # Milliseconds (interval for the animation)
 N_MIN = 10  # Minimum number of bodies
-N_MAX = 1000  # Maximum number of bodies
+N_MAX = 500  # Maximum number of bodies
 NUM_TRIALS = 1  # Number of trials per N for averaging
 
 def run_barnes_hut_simulation(N, seed):
@@ -134,7 +134,7 @@ def compare_computation_times():
     plt.ylabel('Computation Time (seconds)', fontsize=12)
     plt.title('Computation Time for 5 Steps', fontsize=14)
     
-    plt.xscale('log')
+    #plt.xscale('log')
     
     plt.legend()
     plt.show()

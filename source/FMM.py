@@ -1,232 +1,179 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from math import comb as binomial
+from math import factorial
+import cmath
 
-# Constants
-G = 2.959122082855911e-4  # Gravitational constant in AU^3 M_sun^-1 day^-2
-dt = 1/24  # Time step (in units of days, e.g., 1/24 is equivalent to steps of an hour)
-
+G = 1  # Set G = 1 for 2D log potential
+dt = 1 / 1000  # timestep in days (1 hour)
 
 class Body:
-    """Represents a celestial body with position, velocity, mass, and net force."""
     def __init__(self, position, velocity, mass):
-        self.position = np.array(position, dtype=float)  # in AU
-        self.velocity = np.array(velocity, dtype=float)  # in AU/day
-        self.mass = mass  # in solar masses (M_sun)
-        self.force = np.zeros(2)  # in AU/day^2, initialized to zero
-
+        self.position = np.array(position, dtype=float)
+        self.velocity = np.array(velocity, dtype=float)
+        self.mass = mass
+        self.force = np.zeros(2)
 
 class Node:
     def __init__(self, bounds, particles=None):
         self.bounds = bounds
         self.particles = particles if particles else []
-        self.children = []  # Child nodes (subdivided nodes)
-        self.center_of_mass = None
-        self.total_mass = 0
-        self.multipole_expansion = None
+        self.children = []
+        self.center = None
         self.outer_expansion = None
         self.inner_expansion = None
+        self.parent = None
+        self.total_mass = 0
 
     def is_leaf(self):
         return len(self.children) == 0
 
-
 class Simulation:
-    """Handles the physics of the n-body simulation using FMM."""
-    def __init__(self, bodies, max_depth=10, max_particles_per_node=3, theta=0.5):
+    def __init__(self, bodies, max_depth=10, max_particles_per_node=5, expansion_order=5, epsilon=0.1):
         self.bodies = bodies
         self.max_depth = max_depth
         self.max_particles_per_node = max_particles_per_node
-        self.theta = theta
-        self.root_node = self.build_tree(bodies)
-        self.compute_center_of_mass_and_total_mass(self.root_node)
-        self.multipole_expansion(self.root_node)
-        self.build_outer(self.root_node)  # Step 2: Compute Outer for each node
-        self.build_inner(self.root_node)  # Step 3: Compute Inner for each node
-        self.add_nearest_neighbor_contributions()  # Step 4: Add nearest neighbor contributions
+        self.p = expansion_order
+        self.epsilon = epsilon
+        self.rebuild_tree()
+
+    def rebuild_tree(self):
+        self.root_node = self.build_tree(self.bodies)
+        self.compute_center_and_expansions(self.root_node)
+        self.compute_forces()
 
     def build_tree(self, bodies):
-        """Builds a quadtree to organize the bodies."""
-        bounds = (min(body.position[0] for body in bodies),
-                  min(body.position[1] for body in bodies),
-                  max(body.position[0] for body in bodies),
-                  max(body.position[1] for body in bodies))
+        margin = 1e-3
+        xs = [b.position[0] for b in bodies]
+        ys = [b.position[1] for b in bodies]
+        min_x, max_x = min(xs) - margin, max(xs) + margin
+        min_y, max_y = min(ys) - margin, max(ys) + margin
+        bounds = (min_x, min_y, max_x, max_y)
         return self._build_tree(bodies, bounds)
 
     def _build_tree(self, particles, bounds, depth=0):
-        """Recursively builds the quadtree."""
         if len(particles) <= self.max_particles_per_node or depth >= self.max_depth:
             return Node(bounds, particles)
 
-        # Split the current bounding box into 4 quadrants
         cx, cy = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
         quadrants = [
-            (bounds[0], bounds[1], cx, cy),  # bottom-left
-            (cx, bounds[1], bounds[2], cy),  # bottom-right
-            (bounds[0], cy, cx, bounds[3]),  # top-left
-            (cx, cy, bounds[2], bounds[3])   # top-right
+            (bounds[0], bounds[1], cx, cy),
+            (cx, bounds[1], bounds[2], cy),
+            (bounds[0], cy, cx, bounds[3]),
+            (cx, cy, bounds[2], bounds[3])
         ]
-        
-        quadrants_particles = [[] for _ in range(4)]
-        for particle in particles:
-            for i, q in enumerate(quadrants):
-                if q[0] <= particle.position[0] < q[2] and q[1] <= particle.position[1] < q[3]:
-                    quadrants_particles[i].append(particle)
-                    break
-        
+
         children = []
-        for i, q_particles in enumerate(quadrants_particles):
-            if len(q_particles) > 0:
-                children.append(self._build_tree(q_particles, quadrants[i], depth + 1))
+        for q in quadrants:
+            q_particles = [p for p in particles if q[0] <= p.position[0] < q[2] and q[1] <= p.position[1] < q[3]]
+            if q_particles:
+                child = self._build_tree(q_particles, q, depth + 1)
+                child.parent = None
+                children.append(child)
 
         node = Node(bounds)
         node.children = children
+        for child in children:
+            child.parent = node
         return node
 
-    def compute_center_of_mass_and_total_mass(self, node):
-        """Computes the center of mass and total mass for each node."""
-        if node.is_leaf():
-            total_mass = sum([body.mass for body in node.particles])
-            center_of_mass = np.mean([body.position for body in node.particles], axis=0)
-        else:
-            total_mass = 0
-            weighted_sum = np.zeros(2)
-            for child in node.children:
-                self.compute_center_of_mass_and_total_mass(child)
-                total_mass += child.total_mass
-                weighted_sum += child.center_of_mass * child.total_mass
-            center_of_mass = weighted_sum / total_mass
+    def compute_center_and_expansions(self, node):
+        p = self.p
+        node.center = complex((node.bounds[0] + node.bounds[2]) / 2,
+                              (node.bounds[1] + node.bounds[3]) / 2)
+        node.outer_expansion = np.zeros(p + 1, dtype=complex)
 
-        node.center_of_mass = center_of_mass
-        node.total_mass = total_mass
-
-    def multipole_expansion(self, node):
-        """Computes the multipole expansion for each node."""
         if node.is_leaf():
-            node.multipole_expansion = (node.total_mass, node.center_of_mass)
+            for b in node.particles:
+                z = complex(*b.position) - node.center
+                for k in range(p + 1):
+                    node.outer_expansion[k] += b.mass * z**k / factorial(k)
         else:
             for child in node.children:
-                self.multipole_expansion(child)
+                self.compute_center_and_expansions(child)
+                dz = child.center - node.center
+                for n in range(p + 1):
+                    for k in range(n + 1):
+                        if k == 0:
+                            node.outer_expansion[n] += child.outer_expansion[n]
+                        else:
+                            node.outer_expansion[n] += child.outer_expansion[n - k] * dz**k
 
-            total_mass = node.total_mass
-            center_of_mass = node.center_of_mass
-            node.multipole_expansion = (total_mass, center_of_mass)
+    def compute_local_expansions(self, node, parent_inner=None):
+        p = self.p
+        node.inner_expansion = np.zeros(p + 1, dtype=complex)
+        if parent_inner is not None:
+            dz = node.center - node.parent.center
+            for n in range(p + 1):
+                for k in range(n, p + 1):
+                    node.inner_expansion[n] += parent_inner[k] * binomial(k, n) * dz**(k - n)
 
-    def build_outer(self, node):
-        """Computes the Outer(n) for each node using a post-order traversal."""
-        if node.is_leaf():
-            node.outer_expansion = self.compute_outer_for_leaf(node)
-        else:
-            node.outer_expansion = (0, 0)  # Initialize outer expansion
-            for child in node.children:
-                self.build_outer(child)
-                # Combine the outer expansions of the children
-                node.outer_expansion = self.combine_outer(node.outer_expansion, child.outer_expansion, child.center_of_mass)
+        if node.parent:
+            for nbr in self.get_well_separated_nodes(node):
+                dz = node.center - nbr.center
+                for n in range(p + 1):
+                    for k in range(p + 1):
+                        node.inner_expansion[n] += nbr.outer_expansion[k] * (-1)**k * factorial(k + n) / (dz**(k + n + 1) * factorial(k) * factorial(n))
 
-    def compute_outer_for_leaf(self, node):
-        """Computes the outer expansion for a leaf node."""
-        total_mass = sum([body.mass for body in node.particles])
-        center_of_mass = np.mean([body.position for body in node.particles], axis=0)
-        return total_mass, center_of_mass
-
-    def combine_outer(self, outer1, outer2, center2):
-        """Combines two outer expansions, shifting the center of the second expansion."""
-        mass1, center1 = outer1
-        mass2, center2 = outer2
-        combined_mass = mass1 + mass2
-        combined_center = (mass1 * center1 + mass2 * center2) / combined_mass
-        return combined_mass, combined_center
-
-    def build_inner(self, node):
-        """Computes the Inner(n) for each node using a pre-order traversal."""
-        if node.is_leaf():
-            node.inner_expansion = self.compute_inner_for_leaf(node)
-        else:
-            parent_node = node
-            node.inner_expansion = self.compute_inner_for_parent(parent_node)
-            
-            for child in node.children:
-                self.build_inner(child)
-
-    def compute_inner_for_leaf(self, node):
-        """Computes the inner expansion for a leaf node."""
-        return (0, 0)  # Placeholder; Actual computation needed
-
-    def compute_inner_for_parent(self, parent_node):
-        """Computes the inner expansion for a parent node based on interaction set."""
-        return (0, 0)  # Placeholder; Actual computation needed
-
-    def add_nearest_neighbor_contributions(self):
-        """Adds the contributions of nearest neighbors to each leaf node's inner expansion."""
-        for node in self.iterate_leaf_nodes(self.root_node):
-            for body in node.particles:
-                self.add_forces_from_neighbors(body)
-
-    def iterate_leaf_nodes(self, node):
-        """Recursively iterate over leaf nodes in the quadtree."""
-        if node.is_leaf():
-            yield node
-        else:
-            for child in node.children:
-                yield from self.iterate_leaf_nodes(child)
-
-    def add_forces_from_neighbors(self, body):
-        """Adds the forces due to nearby particles (nearest neighbors) directly."""
-        for other_body in self.bodies:
-            if other_body != body:
-                diff_vector = other_body.position - body.position
-                distance = np.linalg.norm(diff_vector)
-                force_magnitude = G * body.mass * other_body.mass / (distance**2 + 1e-1**2)
-                force_vector = force_magnitude * diff_vector / distance
-                body.force += force_vector
+        for child in node.children:
+            self.compute_local_expansions(child, node.inner_expansion)
 
     def compute_forces(self):
-        """Computes the forces using the FMM method."""
+        self.compute_local_expansions(self.root_node)
         for body in self.bodies:
-            body.force = np.zeros(2)  # Clear previous forces
-            self._compute_force_on_particle(self.root_node, body)
+            node = self.find_leaf(self.root_node, body)
+            z = complex(*body.position) - node.center
+            force = 0
+            for k in range(1, self.p + 1):
+                force += -k * node.inner_expansion[k] * z**(k - 1)
+            softened_force = np.array([force.real, force.imag]) * G
 
-    def _compute_force_on_particle(self, node, body):
-        """Recursively computes the gravitational force on a given body."""
-        r = body.position - node.center_of_mass
-        r_mag = np.linalg.norm(r)
-        
+            # Total force = multipole + softened direct
+            softened_force += self.direct_interactions(body, node)
+            body.force = softened_force
+
+    def direct_interactions(self, body, node):
+        f = np.zeros(2)
+        eps2 = self.epsilon ** 2
+        for other in node.particles:
+            if other is not body:
+                r_vec = other.position - body.position
+                r2 = np.dot(r_vec, r_vec) + eps2
+                f += G * other.mass * r_vec / r2
+        return f
+
+    def find_leaf(self, node, body):
         if node.is_leaf():
-            for other_body in node.particles:
-                if other_body != body:
-                    diff_vector = other_body.position - body.position
-                    distance = np.linalg.norm(diff_vector)
-                    force_magnitude = G * body.mass * other_body.mass / (distance**2 + 1e-1**2)
-                    force_vector = force_magnitude * diff_vector / distance
-                    body.force += force_vector
-        else:
-            total_mass, center_of_mass = node.multipole_expansion
-            r_mag = np.linalg.norm(r)
-            if r_mag > self.theta * (node.bounds[2] - node.bounds[0]):
-                force = self.compute_multipole_force(body, node)
-                body.force += force
-            else:
-                for child in node.children:
-                    self._compute_force_on_particle(child, body)
+            return node
+        x, y = body.position
+        for child in node.children:
+            bx0, by0, bx1, by1 = child.bounds
+            if bx0 <= x < bx1 and by0 <= y < by1:
+                return self.find_leaf(child, body)
+        return node
 
-    def compute_multipole_force(self, body, node):
-        """Computes the force using the multipole expansion for a node."""
-        force = np.zeros(2)
-        return force
+    def get_well_separated_nodes(self, node):
+        if node.parent is None:
+            return []
+        neighbors = []
+        for sibling in node.parent.children:
+            if sibling != node:
+                neighbors.append(sibling)
+        return neighbors
 
     def move(self):
         for body in self.bodies:
             body.velocity += 0.5 * (body.force / body.mass) * dt
             body.position += body.velocity * dt
 
-        self.compute_forces()
+        self.rebuild_tree()
 
         for body in self.bodies:
             body.velocity += 0.5 * (body.force / body.mass) * dt
 
 class Animation:
-    """Handles visualization and formatting of the simulation using Matplotlib."""
-    def __init__(self, bodies, simulation, steps=100, interval=50):
+    def __init__(self, bodies, simulation, steps=100, interval=200):
         self.bodies = bodies
         self.simulation = simulation
         self.steps = steps
@@ -234,14 +181,13 @@ class Animation:
 
         self.fig, self.ax = plt.subplots(figsize=(6, 6))
         self.ax.set_facecolor("black")
-        self.ax.set_xlim(-2, 2)  # in AU
-        self.ax.set_ylim(-2, 2)  # in AU
+        self.ax.set_xlim(-2, 2)
+        self.ax.set_ylim(-2, 2)
         self.ax.set_xticks([])
         self.ax.set_yticks([])
 
-        # create a scatter point for each body (size scaled by mass)
         self.scatters = [
-            self.ax.plot([], [], "wo", markersize=body.mass * 0.1)[0]
+            self.ax.plot([], [], "wo", markersize=body.mass)[0]
             for body in bodies
         ]
 
@@ -250,8 +196,7 @@ class Animation:
         )
 
     def update(self, frame):
-        """Updates the animation frame-by-frame."""
-        self.simulation.move()  # Perform one step of the simulation
+        self.simulation.move()
         for scatter, body in zip(self.scatters, self.bodies):
             scatter.set_data(body.position[0], body.position[1])
         return self.scatters
@@ -259,19 +204,17 @@ class Animation:
     def show(self):
         plt.show()
 
-###############################################################################################
-
 if __name__ == "__main__":
-    np.random.seed(42)
+    np.random.seed(0)
     bodies = [
         Body(
-            position=np.random.uniform(-2, 2, 2),  # in AU
-            velocity=np.random.uniform(-0.05, 0.05, 2),  # in AU/day
-            mass=np.random.uniform(0.1, 1),  # in M_sun
+            position=np.random.uniform(-1, 1, 2),
+            velocity=np.random.uniform(-0.01, 0.01, 2),
+            mass=np.random.uniform(0.1,0.5),
         )
-        for _ in range(1000)
+        for _ in range(20)
     ]
 
-    simulation = Simulation(bodies)
-    anim = Animation(bodies, simulation)
+    sim = Simulation(bodies, expansion_order=4)
+    anim = Animation(bodies, sim)
     anim.show()

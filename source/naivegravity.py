@@ -37,12 +37,18 @@ class Simulation:
                     body1.force += force_vector
 
     def move(self):
+        # First half-kick: update velocities by half-step
         for body in self.bodies:
             body.velocity += 0.5 * (body.force / body.mass) * dt
+
+        # Full drift: update positions
+        for body in self.bodies:
             body.position += body.velocity * dt
 
+        # Recompute forces at new positions
         self.compute_forces()
 
+        # Second half-kick: update velocities again
         for body in self.bodies:
             body.velocity += 0.5 * (body.force / body.mass) * dt
 

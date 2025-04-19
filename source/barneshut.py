@@ -105,14 +105,22 @@ class Simulation:
             body.force = root.compute_force(body, self.theta)
     
     def move(self):
+        # First half-kick: update velocities by half-step
         for body in self.bodies:
             body.velocity += 0.5 * (body.force / body.mass) * dt
+
+        # Full drift: update positions
+        for body in self.bodies:
             body.position += body.velocity * dt
 
+        # Recompute forces at new positions
         self.compute_forces()
 
+        # Second half-kick: update velocities again
         for body in self.bodies:
             body.velocity += 0.5 * (body.force / body.mass) * dt
+
+    
 
 class Animation:
     """Handles visualization and formatting of the simulation using Matplotlib."""
@@ -142,28 +150,6 @@ class Animation:
         plt.show()
 
 #####################################################################################################
-def generate_spiral_galaxy(n_bodies, arms=2, spread=0.2, radius=1.5):
-    bodies = []
-    for i in range(n_bodies):
-        angle = np.random.uniform(0, 2 * np.pi)
-        r = radius * np.sqrt(np.random.uniform(0, 1))
-        arm_offset = ((i % arms) / arms) * 2 * np.pi
-        noise = np.random.normal(scale=spread)
-        x = r * np.cos(angle + arm_offset + noise)
-        y = r * np.sin(angle + arm_offset + noise)
-
-        position = np.array([x, y])
-
-        # Velocity perpendicular to radius vector for orbiting
-        speed = np.sqrt(G * 10 / (np.linalg.norm(position) + 0.1))  # central mass = ~10 M_sun
-        direction = np.array([-position[1], position[0]])
-        direction /= np.linalg.norm(direction)
-        velocity = direction * speed
-
-        mass = np.random.uniform(0.05, 0.5)
-
-        bodies.append(Body(position, velocity, mass))
-    return bodies
 
 if __name__ == "__main__":
     np.random.seed(28)
