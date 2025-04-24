@@ -1,12 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from naivegravity import Body, Simulation
+from source.naive.naivegravity import Body, Simulation
 
 # Constants
 G = 2.959122082855911e-4  # gravitational constant in AU^3 M_sun^-1 day^-2
-dt = 1/24  # Time step in days
-steps = 100
-softening_values = [0.1]  # Different softening parameters
+year_days = 365.25  # Number of days in a year
+time_steps = [24,12,6,3,2,1]  # Different time step values in days
+softening_value = 0.01  # Fixed softening parameter
 
 # Function to compute total energy
 def compute_total_energy(bodies, e):
@@ -22,14 +22,13 @@ def compute_total_energy(bodies, e):
 
 # Initialize plot
 plt.figure(figsize=(10, 6))
-time_steps = np.arange(steps + 1)
 
-# Run simulations for different softening values
-for e in softening_values:
-    np.random.seed(42)  # Fix seed for fair comparison
+# Run simulations for different time steps
+for dt in time_steps:
+    np.random.seed(1)  # Fix seed for fair comparison
     bodies = [
         Body(
-            position=np.random.uniform(-100, 100, 2),
+            position=np.random.uniform(-2, 2, 2),
             velocity=np.random.uniform(-0.05, 0.05, 2),
             mass=np.random.uniform(0.1, 1),
         )
@@ -37,19 +36,25 @@ for e in softening_values:
     ]
     
     simulation = Simulation(bodies)
-    total_energies = [compute_total_energy(simulation.bodies, e)]
-    print(e)
+    total_energies = [compute_total_energy(simulation.bodies, softening_value)]
+    
+    steps = int(year_days / dt)  # Simulate for one year
+    
     for _ in range(steps):
         simulation.move()
-        total_energies.append(compute_total_energy(simulation.bodies, e))
+        total_energies.append(compute_total_energy(simulation.bodies, softening_value))
         print(_)
-        
+    
     # Plot energy trend
-    plt.plot(time_steps, total_energies, label=f'e = {e}')
+    plt.plot(np.arange(steps + 1) * dt, total_energies, label=f'dt = {dt} days')
+
+# Mark initial energy level with a horizontal dotted line
+initial_energy = total_energies[0]
+plt.axhline(initial_energy, color='black', linestyle='dotted', label='Initial Energy')
 
 # Format and display plot
-plt.xlabel("Time Step")
+plt.xlabel("Time (Days)")
 plt.ylabel("Total Energy (AU^2/day^2)")
-plt.title("Energy Conservation in N-Body Simulation for Different Softening Parameters")
+plt.title("Energy Conservation for Different Time Steps over One Year")
 plt.legend()
 plt.show()

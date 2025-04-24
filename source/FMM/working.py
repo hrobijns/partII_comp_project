@@ -1,7 +1,8 @@
 import math
 import numpy as np
 from scipy.special import binom
-from quadtree import build_tree
+#from quadtreeFMM import build_tree
+from source.FMM.quadtreeworking import build_tree
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 

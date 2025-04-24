@@ -67,8 +67,8 @@ class Animation:
 
         self.fig, (self.ax_anim, self.ax_metrics) = plt.subplots(1, 2, figsize=(12, 5))
         self.ax_anim.set_facecolor("black")
-        self.ax_anim.set_xlim(-2, 2)
-        self.ax_anim.set_ylim(-2, 2)
+        self.ax_anim.set_xlim(-5, 5)
+        self.ax_anim.set_ylim(-5, 5)
         self.ax_anim.set_xticks([])
         self.ax_anim.set_yticks([])
 
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     np.random.seed(42)
     bodies = [
         Body(
-            position=np.random.uniform(-2, 2, 2),
+            position=np.random.uniform(-5, 5, 2),
             velocity=np.random.uniform(-0.05, 0.05, 2),
             mass=np.random.uniform(0.1, 1),
         )

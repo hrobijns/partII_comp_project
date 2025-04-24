@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from naivegravity import Body, Simulation
+from source.naive.naivegravity import Body, Simulation
 
 # Constants
 G = 2.959122082855911e-4  # gravitational constant in AU^3 M_sun^-1 day^-2
