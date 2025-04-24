@@ -56,7 +56,7 @@ class Simulation:
         self.merge_bodies()
 
 class Animation:
-    def __init__(self, bodies, simulation, steps=100, interval=50):
+    def __init__(self, bodies, simulation, steps=100, interval=5):
         self.bodies = bodies
         self.simulation = simulation
         self.steps = steps

@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from source.naive.naivegravity import Body, Simulation
+from naivegravity import Body, Simulation
 
 # Constants
 G = 2.959122082855911e-4  # gravitational constant in AU^3 M_sun^-1 day^-2
 dt = 1/24  # Time step in days
-steps = 100
+steps = 50
 softening_values = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5]  # Different softening parameters
 
 # Function to compute total energy
@@ -29,7 +29,7 @@ for e in softening_values:
     np.random.seed(42)  # Fix seed for fair comparison
     bodies = [
         Body(
-            position=np.random.uniform(-100, 100, 2),
+            position=np.random.uniform(-1, 1, 2),
             velocity=np.random.uniform(-0.05, 0.05, 2),
             mass=np.random.uniform(0.1, 1),
         )

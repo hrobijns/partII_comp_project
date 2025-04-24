@@ -1,9 +1,8 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-
 # import the pieces from your FMM module
-from source.FMM.working import Body, build_tree, _outer_mpexp, _inner
+from working import Body, build_tree, _outer_mpexp, _inner
 
 # Benchmark parameters
 expansion_order = 4    # your multipole order

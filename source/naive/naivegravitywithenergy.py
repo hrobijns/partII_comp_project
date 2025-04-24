@@ -32,7 +32,7 @@ class Simulation:
                     force_vec = force_mag * diff / dist
                     body1.force += force_vec
 
-    def move(self):
+    def move_leapfrog(self):
         for body in self.bodies:
             body.velocity += 0.5 * (body.force / body.mass) * dt
         for body in self.bodies:
@@ -40,6 +40,11 @@ class Simulation:
         self.compute_forces()
         for body in self.bodies:
             body.velocity += 0.5 * (body.force / body.mass) * dt
+
+    def move_euler(self):
+        for body in self.bodies:
+            
+
 
     def total_energy(self, e=1e-1):
         kinetic = sum(0.5 * b.mass * np.linalg.norm(b.velocity)**2 for b in self.bodies)
