@@ -3,9 +3,8 @@ from scipy.special import binom
 from itertools import chain
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-import math
 
-G = 1
+G = 10**(-30)
 # ---- Data Structures ----
 
 class Point():
@@ -25,12 +24,15 @@ class Body(Point):
 def distance(p1, p2):
     return np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
 
-# ---- Non-Adaptive Quadtree Implementation ----
+# ---- Quadtree Implementation ----
 
 class Node():
+    DISREGARD = (1, 2, 0, 3)
+    CORNER_CHILDREN = (3, 2, 0, 1)
+
     def __init__(self, width, height, x0, y0, points=None, children=None, parent=None, level=0):
         self._points = []
-        self._children = children if children is not None else []
+        self._children = children
         self._cneighbors = 4 * [None]
         self._nneighbors = None
         self._cindex = 0
@@ -55,6 +57,9 @@ class Node():
     def _has_children(self):
         return self._children is not None
 
+    def _get_child(self, i):
+        return self._children[i] if self._children else self
+
     def _split(self):
         if self._has_children(): return
         w, h = self.w / 2, self.h / 2
@@ -72,15 +77,33 @@ class Node():
     def is_leaf(self):
         return not self._has_children()
 
+    def thresh_split(self, thresh):
+        if len(self) > thresh:
+            self._split()
+        if self._has_children():
+            for child in self._children:
+                child.thresh_split(thresh)
+
+    def set_cneighbors(self):
+        if not self._has_children():
+            return  # Prevent trying to iterate over None
+
+        for i, child in enumerate(self._children):
+            sn = (abs(1 + (i ^ 1) - i), abs(1 + (i ^ 2) - i))
+            child._cneighbors[sn[0]] = self._children[i ^ 1]
+            child._cneighbors[sn[1]] = self._children[i ^ 2]
+            pn = tuple(set((0, 1, 2, 3)) - set(sn))
+            nc = lambda j, k: j ^ ((k + 1) % 2 + 1)
+            for idx in pn:
+                cn = self._cneighbors[idx]
+                child._cneighbors[idx] = cn._get_child(nc(i, pn[1])) if cn else None
+            child.set_cneighbors()  # Recursive call on child
+
     def add_points(self, points):
         if self._has_children():
-            # Check if _children is a list before iterating
-            if isinstance(self._children, list):
-                for child in self._children:
-                    filtered = [p for p in points if child._contains(p.x, p.y)]
-                    child.add_points(filtered)
-            else:
-                raise TypeError(f"Expected _children to be a list, but found {type(self._children)}")
+            for child in self._children:
+                filtered = [p for p in points if child._contains(p.x, p.y)]
+                child.add_points(filtered)
         else:
             for p in points:
                 if self._contains(p.x, p.y):
@@ -95,15 +118,32 @@ class Node():
             yield from child.traverse()
         yield self
 
+    @property
+    def nearest_neighbors(self):
+        if self._nneighbors is not None:
+            return self._nneighbors
+        nn = [cn._cneighbors[(i + 1) % 4] for i, cn in enumerate(self._cneighbors)
+              if cn and cn.level == self.level]
+        nn += [cn._cneighbors[(i + 1) % 4]._get_child(self.CORNER_CHILDREN[i])
+               for i, cn in enumerate(self._cneighbors)
+               if cn and cn._cneighbors[(i + 1) % 4] and cn.level < self.level and
+               i != self.DISREGARD[self._cindex]]
+        self._nneighbors = [n for n in self._cneighbors + nn if n]
+        return self._nneighbors
+
+    def interaction_set(self):
+        return [c for n in self.parent.nearest_neighbors for c in (n if n._has_children() else [n])
+                if c not in self.nearest_neighbors]
+
 
 class QuadTree():
-    def __init__(self, points, depth, bbox=(1, 1)):
-        self.root = Node(*bbox, 0, 0)
+    def __init__(self, points, thresh, bbox=(1, 1), boundary='wall'):
+        self.threshold = thresh
+        self.root = Node(*bbox, points=points, level=0, parent=None)
+        self.root._cneighbors = 4 * [self.root if boundary == 'periodic' else None]
         self.root.add_points(points)
-        self.root._split()
-
-        for _ in range(depth):
-            self.root._split()
+        self.root.thresh_split(thresh)
+        self.root.set_cneighbors()
 
     def __len__(self):
         return sum(len(node) for node in self.root.traverse())
@@ -116,7 +156,7 @@ class QuadTree():
         yield from self.root.traverse()
 
 
-def build_tree(points, bbox=None, N=None):
+def build_tree(points, tree_thresh=None, bbox=None, boundary='wall'):
     if bbox is None:
         coords = np.array([(p.x, p.y) for p in points])
         min_x, min_y = coords.min(axis=0)
@@ -129,8 +169,10 @@ def build_tree(points, bbox=None, N=None):
         y0 = min_y - padding
         bbox = (width, height, x0, y0)
 
-    depth = math.ceil(math.log(len(points), 4))
-    return QuadTree(points, depth, bbox=bbox)
+    if tree_thresh is None:
+        tree_thresh = 5
+
+    return QuadTree(points, tree_thresh, bbox=bbox, boundary=boundary)
 
 # ---- FMM Core ----
 
@@ -163,7 +205,7 @@ def _outer_mpexp(tnode, nterms):
 
 def _convert_oi(coeffs, z0):
     inner = np.empty_like(coeffs)
-    inner[0] = sum((coeffs[k] / z0 ** k) * (-1) ** k for k in range(1, len(coeffs))) + coeffs[0] * np.log(-z0)
+    inner[0] = sum((coeffs[k] / z0 ** k) * (-1) ** k for k in range(1, len(coeffs))) + coeffs[0] * np.log(abs(z0) + 1e-2)    
     inner[1:] = [(1 / z0 ** l) * sum((coeffs[k] / z0 ** k) * binom(l + k - 1, k - 1) * (-1) ** k
                                       for k in range(1, len(coeffs))) - coeffs[0] / (z0 ** l * l)
                  for l in range(1, len(coeffs))]
@@ -206,11 +248,20 @@ def gradient_at_point(point, tnode):
     return -np.array([grad_phi.real, grad_phi.imag])
 
 def potential(bodies, bbox=None, tree_thresh=None, nterms=5, boundary='wall'):
-    tree = build_tree(bodies, bbox=bbox, N=len(bodies))
+    tree = build_tree(bodies, tree_thresh, bbox=bbox, boundary=boundary)
+
     _outer_mpexp(tree.root, nterms)
-    tree.root.inner = np.zeros(nterms + 1, dtype=complex)
-    for child in tree.root:
-        _inner(child)
+    
+    # Use root's center to avoid zero division
+    z0 = complex(*tree.root.center)
+    tree.root.inner = _convert_oi(tree.root.outer, z0)
+    
+    if tree.root.is_leaf():
+        _inner(tree.root)
+    else:
+        for child in tree.root:
+            _inner(child)
+    
     return tree
 
 
@@ -218,7 +269,7 @@ def potentialDDS(bodies, sources):
     for body in bodies:
         for source in sources:
             r = distance(body.pos, source.pos)
-            body.phi -= G*body.m * np.log(r)
+            body.phi -= body.m * np.log((r**2+1e-2)**(1/2))
 
 
 def potentialDS(bodies):
@@ -226,7 +277,7 @@ def potentialDS(bodies):
     for i, b in enumerate(bodies):
         for s in (bodies[:i] + bodies[i + 1:]):
             r = distance(b.pos, s.pos)
-            b.phi -= b.m * np.log(r)
+            b.phi -= b.m * np.log((r**2+1e-2)**(1/2))
         phi[i] = b.phi
     return phi
 
@@ -243,6 +294,8 @@ class Simulation:
                 b.accel = np.zeros(2)
 
         self.compute_forces()  # Initial accel
+        print(f"[init] Sample accel: {self.bodies[0].accel}")
+        print(f"[init] Sample velocity after init: {self.bodies[0].velocity}")
 
         # Initial half-step for leapfrog
         for b in self.bodies:
@@ -253,8 +306,6 @@ class Simulation:
             b.phi = 0
 
         self.tree = potential(self.bodies, nterms=self.nterms)
-        unassigned = [b for b in self.bodies if not hasattr(b, 'node') or b.node is None]
-        assert len(unassigned) == 0, f"{len(unassigned)} bodies are not assigned to any node!"
 
         # Make sure each body has an updated node after tree is built
         for node in self.tree.traverse_nodes():
@@ -264,7 +315,7 @@ class Simulation:
         for b in self.bodies:
             node = getattr(b, "node", None)
             grad = gradient_at_point(b, node)
-            b.accel = grad * b.m
+            b.accel = grad
 
     def move(self):
         dt = self.dt
@@ -273,7 +324,6 @@ class Simulation:
             b.x += b.velocity[0] * dt
             b.y += b.velocity[1] * dt
             b.pos = (b.x, b.y)
-
         # Recompute acceleration
         self.compute_forces()
 
@@ -285,9 +335,8 @@ def phi_at_point(pos, bodies):
     phi = 0
     for b in bodies:
         r = distance(pos, b.pos) + 1e-5
-        phi -= b.m * np.log(r)
+        phi -= G * b.m * np.log((r**2+1e-2)**(1/2))
     return phi
-
 
 class Animation:
     def __init__(self, bodies, simulation):
@@ -313,7 +362,6 @@ class Animation:
     def show(self):
         plt.show()
 
-
 if __name__ == "__main__":
     np.random.seed(42)
     init_velocity = [0.0, 0.0]  # customize here
@@ -326,8 +374,11 @@ if __name__ == "__main__":
             mass=np.random.uniform(-1, 1),
             velocity=init_velocity
         )
-        for _ in range(90)
+        for _ in range(10)
     ]
+    bodies.append(
+    Body(0.0, 0.0, mass=10.0, velocity=[0.0, 0.0])
+)
 
     simulation = Simulation(bodies, nterms=nterms)
     anim = Animation(bodies, simulation)
