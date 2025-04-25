@@ -63,8 +63,8 @@ class Animation:
 
         self.fig, self.ax = plt.subplots(figsize=(6, 6))
         self.ax.set_facecolor("black")
-        self.ax.set_xlim(-2, 2)  # in AU
-        self.ax.set_ylim(-2, 2)  # in AU
+        self.ax.set_xlim(-0.1, 0.1)  # in AU
+        self.ax.set_ylim(-0.1, 0.1)  # in AU
         self.ax.set_xticks([])
         self.ax.set_yticks([])
 
@@ -91,14 +91,14 @@ class Animation:
 ###############################################################################################
 
 if __name__ == "__main__":
-    np.random.seed(42)
+    np.random.seed(6)
     bodies = [
         Body(
-            position=np.random.uniform(-2, 2, 2),  # in AU
+            position=np.random.uniform(-0.1, 0.1, 2),  # in AU
             velocity=np.random.uniform(-0.05, 0.05, 2),  # in AU/day
-            mass=np.random.uniform(0.1, 1),  # in M_sun
+            mass=np.random.uniform(1, 10),  # in M_sun
         )
-        for _ in range(10)
+        for _ in range(2)
     ]
 
     simulation = Simulation(bodies)

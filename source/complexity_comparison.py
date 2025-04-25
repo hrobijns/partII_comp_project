@@ -13,7 +13,7 @@ from source.FMM.working import Simulation as FastMultipoleSimulation, Body as Fa
 # Constants
 SIMULATION_STEPS = 1
 N_MIN = 10   # Minimum number of bodies
-N_MAX = 2000  # Maximum number of bodies
+N_MAX = 1000  # Maximum number of bodies
 NUM_TRIALS = 5
 
 # Shared RNG seed strategy

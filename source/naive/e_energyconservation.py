@@ -4,8 +4,8 @@ from naivegravity import Body, Simulation
 
 # Constants
 G = 2.959122082855911e-4  # gravitational constant in AU^3 M_sun^-1 day^-2
-dt = 1/24  # Time step in days
-steps = 50
+dt = 1  # Time step in days
+steps = 200
 softening_values = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5]  # Different softening parameters
 
 # Function to compute total energy
@@ -26,14 +26,14 @@ time_steps = np.arange(steps + 1)
 
 # Run simulations for different softening values
 for e in softening_values:
-    np.random.seed(42)  # Fix seed for fair comparison
+    np.random.seed(6)
     bodies = [
         Body(
-            position=np.random.uniform(-1, 1, 2),
-            velocity=np.random.uniform(-0.05, 0.05, 2),
-            mass=np.random.uniform(0.1, 1),
+            position=np.random.uniform(-0.1, 0.1, 2),  # in AU
+            velocity=np.random.uniform(-0.05, 0.05, 2),  # in AU/day
+            mass=np.random.uniform(1, 10),  # in M_sun
         )
-        for _ in range(100)
+        for _ in range(2)
     ]
     
     simulation = Simulation(bodies)
