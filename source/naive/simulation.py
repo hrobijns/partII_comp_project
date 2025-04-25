@@ -1,8 +1,8 @@
 import numpy as np
 
 k = 1.0      # Coulomb constant
-soft = 1e-1  # softening length
-dt = 1/24    # time step 
+soft = 1  # softening length
+dt = 0.01    # time step 
 
 class Body:
     def __init__(self, position, velocity, charge, mass=1.0):
