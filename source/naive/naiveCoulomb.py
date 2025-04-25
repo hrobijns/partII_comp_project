@@ -22,23 +22,18 @@ class Simulation:
         self.bodies = bodies
 
     def compute_forces(self):
-        """Compute pairwise repulsive Coulomb forces between all bodies."""
-        # reset forces
+        """Compute pairwise repulsive 2D‐log (∝1/r) forces between all bodies."""
         for b in self.bodies:
             b.force = np.zeros(2)
 
-        # pairwise loop (i<j to avoid double counting)
         for i, b1 in enumerate(self.bodies):
             for j in range(i+1, len(self.bodies)):
-                b2 = self.bodies[j]
-                # vector from b2 to b1 (repulsion)
+                b2   = self.bodies[j]
                 diff = b1.position - b2.position
-                dist = np.linalg.norm(diff)
-                # Coulomb force magnitude
-                f_mag = k * b1.charge * b2.charge / (dist**2 + soft**2)
-                # unit direction vector
-                f_vec = (f_mag / (dist + 1e-16)) * diff
-                # apply equal and opposite forces
+                r2   = np.dot(diff, diff)
+                r_soft = np.sqrt(r2 + soft**2)
+                # 2D Coulombic (logarithmic) force: F ∝ 1/r
+                f_vec = k * b1.charge * b2.charge * diff / (r_soft**2)
                 b1.force +=  f_vec
                 b2.force += -f_vec
 

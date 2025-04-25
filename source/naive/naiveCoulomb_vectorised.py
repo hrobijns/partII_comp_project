@@ -26,20 +26,31 @@ class Simulation:
             self.mass = mass.astype(float)
 
     def compute_forces(self):
-        # pairwise displacement vectors (N,N,2)
-        diff   = self.pos[:, None, :] - self.pos[None, :, :]
-        # squared distances + softening
-        r2     = np.sum(diff*diff, axis=2) + soft**2    # (N,N)
-        # r^3  = r2 * sqrt(r2)
-        inv_r3 = 1.0 / (r2 * np.sqrt(r2))               # (N,N)
-        # zero out self-interactions
-        np.fill_diagonal(inv_r3, 0.0)
-        # outerproduct of charges
-        qq     = np.outer(self.charge, self.charge)     # (N,N)
-        # force matrix (N,N,2)
-        Fmat   = k * qq[:, :, None] * diff * inv_r3[:, :, None]
-        # net force on each particle
-        self.force = np.sum(Fmat, axis=1)               # (N,2)
+        """
+        Compute pairwise repulsive 2D‐log (∝1/r) forces between all bodies,
+        using a softened potential to avoid singularities.
+        """
+        # pairwise displacement vectors: shape (N, N, 2)
+        diff = self.pos[:, None, :] - self.pos[None, :, :]
+
+        # squared distances with softening: shape (N, N)
+        r2 = np.sum(diff * diff, axis=2) + soft**2
+
+        # inverse-square law (2D log potential): 1 / r^2
+        inv_r2 = 1.0 / r2
+
+        # eliminate self‐force
+        np.fill_diagonal(inv_r2, 0.0)
+
+        # pairwise charge products: shape (N, N)
+        qq = np.outer(self.charge, self.charge)
+
+        # build full force tensor: shape (N, N, 2)
+        # F_ij = k * q_i q_j * diff_ij / (r^2)
+        Fmat = k * qq[:, :, None] * diff * inv_r2[:, :, None]
+
+        # net force on each particle: sum over j
+        self.force = np.sum(Fmat, axis=1)  # shape (N, 2)
 
     def step(self):
         # half‐kick
