@@ -61,7 +61,7 @@ def run_comparison(n_bodies, dt, steps, p_orders):
     np.random.seed(42)
     master = [
         Body(
-            position=np.random.uniform(-10, 10, 2),
+            position=np.random.uniform(-1, 1, 2),
             velocity=np.random.uniform(-2, 2, 2),
             mass    =np.random.uniform(0.1, 1.0)
         )
@@ -118,9 +118,9 @@ def plot_truncation_error(deltaP):
     plt.show()
 
 if __name__ == '__main__':
-    N        = 100
+    N        = 20
     DT       = 0.01
-    STEPS    = 1
+    STEPS    = 10
     P_ORDERS = [3, 5, 7, 9, 12]
 
     deltaP = run_comparison(N, DT, STEPS, P_ORDERS)
