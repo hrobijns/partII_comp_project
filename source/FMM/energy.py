@@ -11,7 +11,7 @@ k = 1.0
 def compute_total_energy(bodies):
     """½∑m v² + ½∑φ  (φ must already be set on each body)."""
     KE = 0.5 * sum(b.mass * np.dot(b.v, b.v) for b in bodies)
-    U  = 0.5 * sum(b.phi for b in bodies)
+    U  = sum(b.phi for b in bodies)
     return KE + U
 
 def compute_naive_forces_and_potential(bodies):

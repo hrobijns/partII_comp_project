@@ -45,9 +45,9 @@ def outer(tnode, p_order):
 
 def inner(tnode):
     """Accumulate local expansions to leaves and evaluate."""
-    # Shift parent's local expansion to this node
-    z0 = complex(*tnode.parent.center) - complex(*tnode.center)
-    tnode.inner = kernels.L2L(tnode.parent.inner, z0)
+    if tnode.parent is not None:
+        z0 = complex(*tnode.parent.center) - complex(*tnode.center)
+        tnode.inner = kernels.L2L(tnode.parent.inner, z0)
     # Add interactions from well-separated cells
     for tin in tnode.interaction_set:
         z0 = complex(*tin.center) - complex(*tnode.center)
@@ -83,7 +83,7 @@ def inner(tnode):
             inner(child)
 
 
-def potential(particles, tree_thresh=None, bbox=None, p_order=5):
+def potential(particles, tree_thresh=5, bbox=None, p_order=5):
     """Fast Multipole Method evaluation: resets and computes phi & forces."""
     for p in particles:
         p.phi = p.fx = p.fy = 0.0
@@ -93,8 +93,7 @@ def potential(particles, tree_thresh=None, bbox=None, p_order=5):
     outer(tree.root, p_order)
     # Downward pass: initialize root local expansion
     tree.root.inner = np.zeros(p_order+1, dtype=complex)
-    for child in tree.root:
-        inner(child)
+    inner(tree.root)
 
 
 def potential_naive(targets, sources=None):
@@ -199,7 +198,7 @@ class Simulation:
     def compute_forces(self):
         for b in self.bodies:
             b.phi = b.fx = b.fy = 0.0
-        potential(self.bodies, tree_thresh=1, p_order=self.nterms)
+        potential(self.bodies, tree_thresh=5, p_order=self.nterms)
         return [np.array((b.fx, b.fy), dtype=float) for b in self.bodies]
 
 class Animation:

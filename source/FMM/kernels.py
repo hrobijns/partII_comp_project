@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.special import binom
-
+import math 
 
 def multipole(particles, center=(0.0, 0.0), p=5):
     """
@@ -45,7 +45,7 @@ def M2L(M, z0):
     p = len(M) - 1
     L = np.zeros(p+1, dtype=complex)
     # L0 term
-    L[0] = M[0] * np.log(z0)
+    L[0] = M[0] * math.log(abs(z0))
     for j in range(1, p+1):
         L[0] += (-1)**j * M[j] / (j * z0**j)
     # Lk terms
