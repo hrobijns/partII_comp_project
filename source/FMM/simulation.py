@@ -1,29 +1,22 @@
 import math
 import numpy as np
-from scipy.special import binom
-#from quadtreeFMM import build_tree
 from quadtree import build_tree
+import kernels
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-# ——— Gravitational constant ———
-G = 1.0
+# Coulomb constant
+k = 1.0
 
-
-class Point:
-    """Point in 2D"""
-    def __init__(self, x, y):
-        self.x, self.y = x, y
+class Particle:
+    """Particle in 2D with charge q."""
+    def __init__(self, x, y, q):
+        self.x = x
+        self.y = y
         self.pos = (x, y)
-
-
-class Particle(Point):
-    """A 'massive' particle for FMM (we keep .q as the mass)"""
-    def __init__(self, x, y, mass):
-        super(Particle, self).__init__(x, y)
-        self.q = mass           # used throughout as the mass
-        self.phi = 0.0          # gravitational potential energy
-        self.fx = 0.0           # force components
+        self.q = q
+        self.phi = 0.0
+        self.fx = 0.0
         self.fy = 0.0
 
 
@@ -34,146 +27,78 @@ def distance(p1, p2):
     return math.hypot(dx, dy)
 
 
-def multipole(particles, center=(0,0), nterms=5):
-    """Compute a multipole expansion up to nterms terms, scaled by G"""
-    coeffs = np.empty(nterms + 1, dtype=complex)
-    # monopole term = G * Σ m_i
-    coeffs[0] = G * sum(p.q for p in particles)
-    # higher moments
-    coeffs[1:] = [
-        G * sum(-p.q * complex(p.x - center[0], p.y - center[1])**k / k
-                for p in particles)
-        for k in range(1, nterms+1)
-    ]
-    return coeffs
-
-
-def M2M(coeffs, z0):
-    """Update multipole expansion coefficients for a center shift"""
-    shift = np.empty_like(coeffs)
-    shift[0] = coeffs[0]
-    shift[1:] = [
-        sum(coeffs[k] * z0**(l - k) * binom(l-1, k-1)
-            - (coeffs[0] * z0**l) / l
-            for k in range(1, l))
-        for l in range(1, len(coeffs))
-    ]
-    return shift
-
-
-def outer(tnode, nterms):
-    """Compute outer multipole expansion recursively"""
+def outer(tnode, p_order):
+    """Compute multipole expansion recursively using kernels."""
     if tnode.is_leaf():
-        tnode.outer = multipole(tnode.get_points(),
-                                 center=tnode.center, nterms=nterms)
+        tnode.outer = kernels.multipole(
+            tnode.get_points(),
+            center=tnode.center,
+            p=p_order
+        )
     else:
-        tnode.outer = np.zeros(nterms+1, dtype=complex)
+        tnode.outer = np.zeros(p_order+1, dtype=complex)
         for child in tnode:
-            outer(child, nterms)
-            z0 = (complex(*child.center)
-                  - complex(*tnode.center))
-            tnode.outer += M2M(child.outer, z0)
-
-
-def M2L(coeffs, z0):
-    """Convert outer to inner expansion about z0"""
-    inner = np.empty_like(coeffs)
-    inner[0] = (
-        sum((coeffs[k]/z0**k) * (-1)**k
-            for k in range(1, len(coeffs)))
-        + coeffs[0] * np.log(-z0)
-    )
-    inner[1:] = [
-        (1/z0**l) * sum((coeffs[k]/z0**k) * binom(l+k-1, k-1) * (-1)**k
-                        for k in range(1, len(coeffs)))
-        - coeffs[0] / (z0**l * l)
-        for l in range(1, len(coeffs))
-    ]
-    return inner
-
-
-def L2L(coeffs, z0):
-    """Shift inner (Taylor) expansions to new center"""
-    return [
-        sum(coeffs[k] * binom(k, l) * (-z0)**(k-l)
-            for k in range(l, len(coeffs)))
-        for l in range(len(coeffs))
-    ]
+            outer(child, p_order)
+            z0 = complex(*child.center) - complex(*tnode.center)
+            tnode.outer += kernels.M2M(child.outer, z0)
 
 
 def inner(tnode):
-    """Accumulate multipole + direct interactions to leaves"""
-    # pull down the parent inner
+    """Accumulate local expansions to leaves and evaluate."""
+    # Shift parent's local expansion to this node
     z0 = complex(*tnode.parent.center) - complex(*tnode.center)
-    tnode.inner = L2L(tnode.parent.inner, z0)
-
-    # add contributions from well-separated cells
+    tnode.inner = kernels.L2L(tnode.parent.inner, z0)
+    # Add interactions from well-separated cells
     for tin in tnode.interaction_set:
         z0 = complex(*tin.center) - complex(*tnode.center)
-        tnode.inner = [
-            ti + oi
-            for ti, oi in zip(tnode.inner,
-                              M2L(tin.outer, z0))
-        ]
+        tnode.inner += kernels.M2L(tin.outer, z0)
 
     if tnode.is_leaf():
         zc = complex(*tnode.center)
-        # evaluate local expansion
         for p in tnode.get_points():
             z = complex(*p.pos)
-            # potential (log-kernel)
-            p.phi -= np.real(np.polyval(tnode.inner[::-1], z - zc))
-            # field = derivative of that potential
-            deriv = [l * tnode.inner[l] for l in range(1, len(tnode.inner))]
+            # potential via local expansion
+            phi_loc = np.real(sum(
+                tnode.inner[j] * (z - zc)**j
+                for j in range(len(tnode.inner))
+            ))
+            p.phi += k * p.q * phi_loc
+            # field = derivative of local expansion
+            deriv = [j * tnode.inner[j] for j in range(1, len(tnode.inner))]
             E = np.polyval(deriv[::-1], z - zc)
             Ex, Ey = E.real, -E.imag
-            # force = mass * field, and we want it attractive,
-            # but the local expansion already carries G, so just:
+            # force = q * E (repulsive)
             p.fx += p.q * Ex
             p.fy += p.q * Ey
 
-        # Direct interactions with neighbor cells
+        # Direct interactions with near neighbors
         for nn in tnode.nearest_neighbors:
-            pts = tnode.get_points()
-            srcs = nn.get_points()
-            if srcs:
-                force_naive(pts, srcs)
-                potential_naive(pts, srcs)
-
+            force_naive(tnode.get_points(), nn.get_points())
+            potential_naive(tnode.get_points(), nn.get_points())
         # Direct all-to-all inside this cell
         forceDS(tnode.get_points())
-        _ = potentialDS(tnode.get_points())
+        potentialDS(tnode.get_points())
     else:
         for child in tnode:
             inner(child)
 
 
-def potential(particles, bbox=None, tree_thresh=None,
-              nterms=5, boundary='wall'):
-    """Fast Multipole Method evaluation: resets and computes phi & forces"""
+def potential(particles, tree_thresh=None, bbox=None, p_order=5):
+    """Fast Multipole Method evaluation: resets and computes phi & forces."""
     for p in particles:
         p.phi = p.fx = p.fy = 0.0
 
-    tree = build_tree(particles, tree_thresh,
-                      bbox=bbox, boundary=boundary)
-    outer(tree.root, nterms)
-    tree.root.inner = np.zeros(nterms+1, dtype=complex)
-    any(inner(child) for child in tree.root)
+    tree = build_tree(particles, tree_thresh, bbox=bbox)
+    # Upward pass: compute multipole expansions
+    outer(tree.root, p_order)
+    # Downward pass: initialize root local expansion
+    tree.root.inner = np.zeros(p_order+1, dtype=complex)
+    for child in tree.root:
+        inner(child)
 
 
 def potential_naive(particles, sources):
-    """Direct sum of gravitational potential from separate sources"""
-    for p in particles:
-        for s in sources:
-            r = distance(p.pos, s.pos)
-            if r == 0:
-                continue
-            # U = -G m1 m2 log(r)
-            p.phi -= G * p.q * s.q * math.log(r)
-
-
-def force_naive(particles, sources):
-    """Direct sum of gravitational forces from separate sources"""
+    """Direct sum of coulomb potential (repulsive) from sources."""
     for p in particles:
         for s in sources:
             dx = p.x - s.x
@@ -181,28 +106,42 @@ def force_naive(particles, sources):
             r2 = dx*dx + dy*dy
             if r2 == 0:
                 continue
-            # magnitude G m1 m2 / r^2
-            f = G * p.q * s.q / r2
-            # subtract so that force is attractive
-            p.fx -= f * dx
-            p.fy -= f * dy
+            r = math.sqrt(r2)
+            p.phi += k * p.q * s.q / r
+
+
+def force_naive(particles, sources):
+    """Direct sum of coulomb force (repulsive) from sources."""
+    for p in particles:
+        for s in sources:
+            dx = p.x - s.x
+            dy = p.y - s.y
+            r2 = dx*dx + dy*dy
+            if r2 == 0:
+                continue
+            r = math.sqrt(r2)
+            f = k * p.q * s.q / r2
+            p.fx += f * dx / r
+            p.fy += f * dy / r
 
 
 def potentialDS(particles):
-    """Direct sum of gravitational potential all-to-all"""
+    """Direct sum of coulomb potential all-to-all."""
     phi = np.zeros(len(particles))
     for i, p in enumerate(particles):
         for s in particles[:i] + particles[i+1:]:
-            r = distance(p.pos, s.pos)
+            dx = p.x - s.x
+            dy = p.y - s.y
+            r = math.hypot(dx, dy)
             if r == 0:
                 continue
-            p.phi -= G * p.q * s.q * math.log(r)
+            p.phi += k * p.q * s.q / r
         phi[i] = p.phi
     return phi
 
 
 def forceDS(particles):
-    """Direct sum of gravitational forces all-to-all"""
+    """Direct sum of coulomb force all-to-all."""
     for i, p in enumerate(particles):
         for s in particles[:i] + particles[i+1:]:
             dx = p.x - s.x
@@ -210,12 +149,13 @@ def forceDS(particles):
             r2 = dx*dx + dy*dy
             if r2 == 0:
                 continue
-            f = G * p.q * s.q / r2
-            p.fx -= f * dx
-            p.fy -= f * dy
+            r = math.sqrt(r2)
+            f = k * p.q * s.q / r2
+            p.fx += f * dx / r
+            p.fy += f * dy / r
 
 
-# ----- Simulation and Animation Classes, unchanged except for naming----
+# ----- Simulation and Animation Classes -----
 
 class Body(Particle):
     def __init__(self, position, velocity, mass):
@@ -245,35 +185,28 @@ class Simulation:
     def compute_forces(self):
         for b in self.bodies:
             b.phi = b.fx = b.fy = 0.0
-        potential(particles=self.bodies,
-                  tree_thresh=10,
-                  nterms=self.nterms)
-        return [np.array((b.fx, b.fy), dtype=float)
-                for b in self.bodies]
+        potential(self.bodies, tree_thresh=10, p_order=self.nterms)
+        return [np.array((b.fx, b.fy), dtype=float) for b in self.bodies]
 
 class Animation:
     def __init__(self, bodies, simulation, mass_scale=1000):
-        self.bodies     = bodies
-        self.sim        = simulation
+        self.bodies = bodies
+        self.sim = simulation
         self.mass_scale = mass_scale
 
-        # --- set up black background ---
         self.fig, self.ax = plt.subplots()
-        self.fig.patch.set_facecolor('black')      # figure bg
-        self.ax.set_facecolor('black')             # axes bg
-        self.ax.axis('off')                        # no axes, ticks, or grid
+        self.fig.patch.set_facecolor('black')
+        self.ax.set_facecolor('black')
+        self.ax.axis('off')
 
-        # --- white “star” markers ---
         self.scat = self.ax.scatter(
             [b.x for b in bodies],
             [b.y for b in bodies],
             s=[b.mass * self.mass_scale for b in bodies],
-            c='white',     # white bodies
+            c='white',
             marker='o',
             alpha=1
         )
-
-        # keep same limits (you can adjust)
         self.ax.set_xlim(-10, 10)
         self.ax.set_ylim(-10, 10)
         self.ax.set_autoscale_on(False)
@@ -294,25 +227,26 @@ class Animation:
         )
         plt.show()
 
-
 if __name__ == "__main__":
     np.random.seed(42)
     bodies = [
         Body(
             position=np.random.uniform(-10, 10, 2),
             velocity=np.random.uniform(-2, 2, 2),
-            mass=np.random.uniform(0.1, 1.0),
+            mass=np.random.uniform(0.1, 1.0)
         )
         for _ in range(1000)
     ]
+    # Optional central charged body
     central_mass = 1e3
-    black_hole = Body(
-        position=(0.0, 0.0),
-        velocity=(0.0, 0.0),
-        mass=central_mass
+    bodies.append(
+        Body(
+            position=(0.0, 0.0),
+            velocity=(0.0, 0.0),
+            mass=central_mass
+        )
     )
-    bodies.append(black_hole)
 
-    sim  = Simulation(bodies, dt=0.005, nterms=4)
+    sim = Simulation(bodies, dt=0.005, nterms=4)
     anim = Animation(bodies, sim, mass_scale=1)
     anim.show()
