@@ -27,7 +27,7 @@ class Animation:
 
 def main():
     np.random.seed(42)
-    N = 20
+    N = 100
     pos = np.random.uniform(-1,1,(N,2))
     vel = np.random.uniform(-0.05,0.05,(N,2))
     charge = np.ones(N)

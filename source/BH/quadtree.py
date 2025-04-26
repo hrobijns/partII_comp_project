@@ -3,7 +3,7 @@ import numpy as np
 # --- physical / numerical constants ---
 k     = 1.0    # Coulomb constant
 soft  = 1.0    # softening length (same units as positions)
-dt    = 0.01   # time step
+dt    = 0.0001   # time step
 theta = 0.5    # Barnes-Hut opening angle
 
 # --- QuadTree for Coulombic BH ---

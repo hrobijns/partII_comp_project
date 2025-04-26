@@ -2,7 +2,7 @@ import math
 import numpy as np
 from scipy.special import binom
 #from quadtreeFMM import build_tree
-from quadtreeworking import build_tree
+from quadtree import build_tree
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
@@ -48,7 +48,7 @@ def multipole(particles, center=(0,0), nterms=5):
     return coeffs
 
 
-def _shift_mpexp(coeffs, z0):
+def M2M(coeffs, z0):
     """Update multipole expansion coefficients for a center shift"""
     shift = np.empty_like(coeffs)
     shift[0] = coeffs[0]
@@ -61,7 +61,7 @@ def _shift_mpexp(coeffs, z0):
     return shift
 
 
-def _outer_mpexp(tnode, nterms):
+def outer(tnode, nterms):
     """Compute outer multipole expansion recursively"""
     if tnode.is_leaf():
         tnode.outer = multipole(tnode.get_points(),
@@ -69,13 +69,13 @@ def _outer_mpexp(tnode, nterms):
     else:
         tnode.outer = np.zeros(nterms+1, dtype=complex)
         for child in tnode:
-            _outer_mpexp(child, nterms)
+            outer(child, nterms)
             z0 = (complex(*child.center)
                   - complex(*tnode.center))
-            tnode.outer += _shift_mpexp(child.outer, z0)
+            tnode.outer += M2M(child.outer, z0)
 
 
-def _convert_oi(coeffs, z0):
+def M2L(coeffs, z0):
     """Convert outer to inner expansion about z0"""
     inner = np.empty_like(coeffs)
     inner[0] = (
@@ -92,7 +92,7 @@ def _convert_oi(coeffs, z0):
     return inner
 
 
-def _shift_texp(coeffs, z0):
+def L2L(coeffs, z0):
     """Shift inner (Taylor) expansions to new center"""
     return [
         sum(coeffs[k] * binom(k, l) * (-z0)**(k-l)
@@ -101,11 +101,11 @@ def _shift_texp(coeffs, z0):
     ]
 
 
-def _inner(tnode):
+def inner(tnode):
     """Accumulate multipole + direct interactions to leaves"""
     # pull down the parent inner
     z0 = complex(*tnode.parent.center) - complex(*tnode.center)
-    tnode.inner = _shift_texp(tnode.parent.inner, z0)
+    tnode.inner = L2L(tnode.parent.inner, z0)
 
     # add contributions from well-separated cells
     for tin in tnode.interaction_set:
@@ -113,7 +113,7 @@ def _inner(tnode):
         tnode.inner = [
             ti + oi
             for ti, oi in zip(tnode.inner,
-                              _convert_oi(tin.outer, z0))
+                              M2L(tin.outer, z0))
         ]
 
     if tnode.is_leaf():
@@ -137,15 +137,15 @@ def _inner(tnode):
             pts = tnode.get_points()
             srcs = nn.get_points()
             if srcs:
-                forceDDS(pts, srcs)
-                potentialDDS(pts, srcs)
+                force_naive(pts, srcs)
+                potential_naive(pts, srcs)
 
         # Direct all-to-all inside this cell
         forceDS(tnode.get_points())
         _ = potentialDS(tnode.get_points())
     else:
         for child in tnode:
-            _inner(child)
+            inner(child)
 
 
 def potential(particles, bbox=None, tree_thresh=None,
@@ -156,12 +156,12 @@ def potential(particles, bbox=None, tree_thresh=None,
 
     tree = build_tree(particles, tree_thresh,
                       bbox=bbox, boundary=boundary)
-    _outer_mpexp(tree.root, nterms)
+    outer(tree.root, nterms)
     tree.root.inner = np.zeros(nterms+1, dtype=complex)
-    any(_inner(child) for child in tree.root)
+    any(inner(child) for child in tree.root)
 
 
-def potentialDDS(particles, sources):
+def potential_naive(particles, sources):
     """Direct sum of gravitational potential from separate sources"""
     for p in particles:
         for s in sources:
@@ -172,7 +172,7 @@ def potentialDDS(particles, sources):
             p.phi -= G * p.q * s.q * math.log(r)
 
 
-def forceDDS(particles, sources):
+def force_naive(particles, sources):
     """Direct sum of gravitational forces from separate sources"""
     for p in particles:
         for s in sources:

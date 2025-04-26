@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from quadtree import k, soft, dt
+from quadtree import k, soft
 from simulation import Simulation, Body
 
 
@@ -64,7 +64,7 @@ def run_energy_conservation(theta_values, N, num_steps, space_size, seed=0):
             energies.append(compute_total_energy(sim.bodies))
 
         energies = np.array(energies)
-        pct_change = (energies - E0) / E0 * 100.0
+        pct_change = (energies - E0) / abs(E0) * 100.0
         results[theta] = pct_change
         print(theta)
     return results
@@ -74,7 +74,7 @@ def main():
     # Benchmark parameters
     theta_values = [0.1, 0.3, 0.5, 0.7]
     N = 30
-    num_steps = 100
+    num_steps = 1000
     space_size = 10.0
 
     # Run energy conservation tests
@@ -86,17 +86,19 @@ def main():
     # Plot percentage energy change
     plt.figure(figsize=(8, 6))
     for theta, pct in results.items():
-        plt.plot(steps, pct, linestyle='-', label=f'Theta={theta:.2f}')
+        plt.plot(steps, pct, linestyle='-', label=fr'$\theta={theta:.2f}$')
 
     # Reference line at zero change
     plt.axhline(0.0, color='black', linestyle='--')
 
     plt.xlabel('Steps')
-    plt.ylabel('Energy change (%)')
-    plt.title('Energy Conservation vs. Time for Different Theta')
+    plt.ylabel('Percentage Total Energy Change of System (%)')
+    #plt.title('Energy Conservation vs. Time for Different Theta')
     plt.legend()
+    plt.xlim(0,1000)
     plt.grid(True)
     plt.tight_layout()
+    plt.savefig('figures/theta_energy.png', dpi=300)
     plt.show()
 
 if __name__ == '__main__':
