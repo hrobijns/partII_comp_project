@@ -235,17 +235,9 @@ if __name__ == "__main__":
             velocity=np.random.uniform(-2, 2, 2),
             mass=np.random.uniform(0.1, 1.0)
         )
-        for _ in range(1000)
+        for _ in range(100)
     ]
-    # Optional central charged body
-    central_mass = 1e3
-    bodies.append(
-        Body(
-            position=(0.0, 0.0),
-            velocity=(0.0, 0.0),
-            mass=central_mass
-        )
-    )
+
 
     sim = Simulation(bodies, dt=0.005, nterms=4)
     anim = Animation(bodies, sim, mass_scale=1)
