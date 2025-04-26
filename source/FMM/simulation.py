@@ -76,8 +76,8 @@ def inner(tnode):
             force_naive(tnode.get_points(), nn.get_points())
             potential_naive(tnode.get_points(), nn.get_points())
         # Direct all-to-all inside this cell
-        forceDS(tnode.get_points())
-        potentialDS(tnode.get_points())
+        force_naive(tnode.get_points())
+        potential_naive(tnode.get_points())
     else:
         for child in tnode:
             inner(child)
@@ -97,35 +97,7 @@ def potential(particles, tree_thresh=None, bbox=None, p_order=5):
         inner(child)
 
 
-def potential_naive(particles, sources):
-    """Direct sum of coulomb potential (repulsive) from sources."""
-    for p in particles:
-        for s in sources:
-            dx = p.x - s.x
-            dy = p.y - s.y
-            r2 = dx*dx + dy*dy
-            if r2 == 0:
-                continue
-            r = math.sqrt(r2)
-            p.phi += k * p.q * s.q / r
-
-
-def force_naive(particles, sources):
-    """Direct sum of coulomb force (repulsive) from sources."""
-    for p in particles:
-        for s in sources:
-            dx = p.x - s.x
-            dy = p.y - s.y
-            r2 = dx*dx + dy*dy
-            if r2 == 0:
-                continue
-            r = math.sqrt(r2)
-            f = k * p.q * s.q / r2
-            p.fx += f * dx / r
-            p.fy += f * dy / r
-
-
-def potentialDS(particles):
+def potential_naive(particles):
     """Direct sum of coulomb potential all-to-all."""
     phi = np.zeros(len(particles))
     for i, p in enumerate(particles):
@@ -135,12 +107,12 @@ def potentialDS(particles):
             r = math.hypot(dx, dy)
             if r == 0:
                 continue
-            p.phi += k * p.q * s.q / r
+            p.phi += k * p.q * s.q * math.log(r)
         phi[i] = p.phi
     return phi
 
 
-def forceDS(particles):
+def force_naive(particles):
     """Direct sum of coulomb force all-to-all."""
     for i, p in enumerate(particles):
         for s in particles[:i] + particles[i+1:]:
@@ -150,7 +122,9 @@ def forceDS(particles):
             if r2 == 0:
                 continue
             r = math.sqrt(r2)
-            f = k * p.q * s.q / r2
+            # magnitude ~1/r
+            f = k * p.q * s.q / r
+            # project onto components: f*(dx,dy)/r = k*q_i*q_s*(dx,dy)/r^2
             p.fx += f * dx / r
             p.fy += f * dy / r
 
