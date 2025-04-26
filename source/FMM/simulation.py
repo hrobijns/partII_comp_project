@@ -199,7 +199,7 @@ class Simulation:
     def compute_forces(self):
         for b in self.bodies:
             b.phi = b.fx = b.fy = 0.0
-        potential(self.bodies, tree_thresh=10, p_order=self.nterms)
+        potential(self.bodies, tree_thresh=1, p_order=self.nterms)
         return [np.array((b.fx, b.fy), dtype=float) for b in self.bodies]
 
 class Animation:
