@@ -97,37 +97,77 @@ def potential(particles, tree_thresh=None, bbox=None, p_order=5):
         inner(child)
 
 
-def potential_naive(particles):
-    """Direct sum of coulomb potential all-to-all."""
-    phi = np.zeros(len(particles))
-    for i, p in enumerate(particles):
-        for s in particles[:i] + particles[i+1:]:
-            dx = p.x - s.x
-            dy = p.y - s.y
-            r = math.hypot(dx, dy)
-            if r == 0:
-                continue
-            p.phi += k * p.q * s.q * math.log(r)
-        phi[i] = p.phi
+def potential_naive(targets, sources=None):
+    """
+    Direct-sum Coulomb potential.
+
+    If `sources` is None, does an all-to-all among `targets` (skipping self).
+    Otherwise, does a cross-sum: every p in targets accumulates potential from every s in sources.
+    Returns an array phi of length len(targets).
+    """
+    phi = np.zeros(len(targets), dtype=float)
+
+    if sources is None:
+        # all-to-all within the same list
+        for i, p in enumerate(targets):
+            for s in targets[:i] + targets[i+1:]:
+                dx = p.x - s.x
+                dy = p.y - s.y
+                r = math.hypot(dx, dy)
+                if r == 0:
+                    continue
+                p.phi += k * p.q * s.q * math.log(r)
+            phi[i] = p.phi
+    else:
+        # cross interactions between two lists
+        for i, p in enumerate(targets):
+            for s in sources:
+                dx = p.x - s.x
+                dy = p.y - s.y
+                r = math.hypot(dx, dy)
+                if r == 0:
+                    continue
+                p.phi += k * p.q * s.q * math.log(r)
+            phi[i] = p.phi
+
     return phi
 
 
-def force_naive(particles):
-    """Direct sum of coulomb force all-to-all."""
-    for i, p in enumerate(particles):
-        for s in particles[:i] + particles[i+1:]:
-            dx = p.x - s.x
-            dy = p.y - s.y
-            r2 = dx*dx + dy*dy
-            if r2 == 0:
-                continue
-            r = math.sqrt(r2)
-            # magnitude ~1/r
-            f = k * p.q * s.q / r
-            # project onto components: f*(dx,dy)/r = k*q_i*q_s*(dx,dy)/r^2
-            p.fx += f * dx / r
-            p.fy += f * dy / r
+def force_naive(targets, sources=None):
+    """
+    Direct-sum Coulomb forces.
 
+    If `sources` is None, does an all-to-all among `targets` (skipping self).
+    Otherwise, does a cross-sum: every p in targets feels every s in sources.
+    """
+    if sources is None:
+        # all-to-all within the same list
+        for i, p in enumerate(targets):
+            for s in targets[:i] + targets[i+1:]:
+                dx = p.x - s.x
+                dy = p.y - s.y
+                r2 = dx*dx + dy*dy
+                if r2 == 0:
+                    continue
+                r = math.sqrt(r2)
+                # Coulomb force magnitude = k * q_i * q_j / r
+                f = k * p.q * s.q / r
+                # project onto components: (dx, dy)/r
+                p.fx += f * dx / r
+                p.fy += f * dy / r
+    else:
+        # cross interactions between two lists
+        for p in targets:
+            for s in sources:
+                dx = p.x - s.x
+                dy = p.y - s.y
+                r2 = dx*dx + dy*dy
+                if r2 == 0:
+                    continue
+                r = math.sqrt(r2)
+                f = k * p.q * s.q / r
+                p.fx += f * dx / r
+                p.fy += f * dy / r
 
 # ----- Simulation and Animation Classes -----
 
