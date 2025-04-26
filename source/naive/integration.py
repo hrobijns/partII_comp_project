@@ -89,12 +89,12 @@ def main():
     plt.plot(idx, err_e, label='Euler')
     plt.axhline(0, color='black', linestyle=':')
     plt.xlabel('Step')
-    plt.ylabel('Percentage Energy Change (%)')
-    plt.title(f'Energy Conservation: {N}-Body 2D Coulomb System')
+    plt.ylabel('Percentage Total Energy Change of System (%)')
+    #plt.title(f'Energy Conservation: {N}-Body 2D Coulomb System')
     plt.legend()
     plt.xlim(0,1000)
     plt.tight_layout()
-    plt.savefig('energy_coulomb_comparison.png', dpi=300)
+    plt.savefig('figures/integration.png', dpi=300)
     plt.show()
 
 
