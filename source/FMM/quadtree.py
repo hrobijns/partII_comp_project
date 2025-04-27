@@ -2,7 +2,6 @@
 Implementation of a quadtree points structure for use in the fast multipole method.
 '''
 
-__author__ = 'Luis Barroso-Luque'
 
 import numpy as np
 from itertools import chain
