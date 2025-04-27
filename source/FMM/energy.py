@@ -1,127 +1,47 @@
-import copy
-import math
 import numpy as np
 import matplotlib.pyplot as plt
+from simulation import Particle, potential, potential_naive
 
-from simulation import Body, Simulation, potential_naive, force_naive
+# Generate random particles
+np.random.seed(0)
+n_particles = 50
+positions = np.random.uniform(-1, 1, size=(n_particles, 2))
+charges = np.random.uniform(-1, 1, size=n_particles)
 
-# Coulomb constant (as in simulation.py)
-k = 1.0
+# Compute exact potentials
+particles_naive = [Particle(x, y, q) for (x, y), q in zip(positions, charges)]
+for p in particles_naive:
+    p.phi = 0.0
+potential_naive(particles_naive)
+phi_exact = np.array([p.phi for p in particles_naive])
 
-def compute_total_energy(bodies):
-    """½∑m v² + ½∑φ  (φ must already be set on each body)."""
-    KE = 0.5 * sum(b.mass * np.dot(b.v, b.v) for b in bodies)
-    U  = sum(b.phi for b in bodies)
-    return KE + U
+# Test range of p values
+p_values = range(1, 16)
+errors = []
 
-def compute_naive_forces_and_potential(bodies):
-    """
-    Reset φ, fx, fy; then call the two direct‐sum routines
-    to set bodies[].phi and bodies[].fx/fy.
-    Returns list of force‐vectors like Simulation.compute_forces().
-    """
-    for b in bodies:
-        b.phi = b.fx = b.fy = 0.0
-    # set φ via direct‐sum
-    potential_naive(bodies)
-    # set fx, fy via direct‐sum
-    force_naive(bodies)
-    return [np.array((b.fx, b.fy), dtype=float) for b in bodies]
+for p_order in p_values:
+    # Reset particles for FMM each time
+    particles_fmm = [Particle(x, y, q) for (x, y), q in zip(positions, charges)]
+    for p_fmm in particles_fmm:
+        p_fmm.phi = 0.0
 
-def step_naive(bodies, dt):
-    """
-    One leapfrog step using direct‐sum forces.
-    """
-    # half-kick
-    F = compute_naive_forces_and_potential(bodies)
-    for b, f in zip(bodies, F):
-        b.v += 0.5 * dt * f / b.mass
+    # Compute potentials using FMM
+    potential(particles_fmm, tree_thresh=1, p_order=p_order)
 
-    # drift
-    for b in bodies:
-        b.x += dt * b.v[0]
-        b.y += dt * b.v[1]
-        b.pos = (b.x, b.y)
+    phi_fmm = np.array([particle.phi for particle in particles_fmm])
 
-    # half-kick
-    F = compute_naive_forces_and_potential(bodies)
-    for b, f in zip(bodies, F):
-        b.v += 0.5 * dt * f / b.mass
+    # Calculate relative L2 error
+    err = np.linalg.norm(phi_fmm - phi_exact) / np.linalg.norm(phi_exact)
+    errors.append(err)
 
-def run_comparison(n_bodies, dt, steps, p_orders):
-    """
-    • Build one shared initial snapshot.
-    • Run a brute‐force “naive” simulation once → P_naive(t).
-    • For each p in p_orders, run an FMM sim → P_fmm(t).
-    • Compute ΔP(t) = P_fmm(t) – P_naive(t) to isolate FMM truncation error.
-    Returns a dict p→ΔP_list.
-    """
-    print(f"Initializing comparison: {n_bodies} bodies, dt={dt}, {steps} steps, p_orders={p_orders}")
-    # 1) make the master initial condition
-    np.random.seed(42)
-    master = [
-        Body(
-            position=np.random.uniform(-1, 1, 2),
-            velocity=np.random.uniform(-2, 2, 2),
-            mass    =np.random.uniform(0.1, 1.0)
-        )
-        for _ in range(n_bodies)
-    ]
+    print(f"p={p_order}, error={err:.6f}")
 
-    # 2) brute-force run
-    print("Starting brute-force (naive) run...")
-    bodies_naive = copy.deepcopy(master)
-    compute_naive_forces_and_potential(bodies_naive)
-    E0 = compute_total_energy(bodies_naive)
-    P_naive = []
-    for i in range(steps):
-        step_naive(bodies_naive, dt)
-        compute_naive_forces_and_potential(bodies_naive)  # update φ
-        En = compute_total_energy(bodies_naive)
-        err = (En - E0) / abs(E0) * 100.0
-        P_naive.append(err)
-        print(f"  Naive step {i+1}/{steps}: energy error = {err:.6f}%")
-
-    # 3) FMM runs & ΔP
-    deltaP = {}
-    for p in p_orders:
-        print(f"\nStarting FMM run with expansion order p = {p}...")
-        bodies_fmm = copy.deepcopy(master)
-        sim = Simulation(bodies_fmm, dt=dt, nterms=p)
-        sim.compute_forces()  # initialize φ
-        Pf = []
-        for i in range(steps):
-            sim.step()
-            sim.compute_forces()  # update φ
-            Ef = compute_total_energy(bodies_fmm)
-            err_fmm = (Ef - E0) / abs(E0) * 100.0
-            Pf.append(err_fmm)
-            delta = err_fmm - P_naive[i]
-            print(f"  FMM p={p} step {i+1}/{steps}: energy error = {err_fmm:.6f}%, ΔP = {delta:.6f}%")
-        Δ = [f - n for f, n in zip(Pf, P_naive)]
-        deltaP[p] = Δ
-
-    print("\nAll simulations complete.")
-    return deltaP
-
-def plot_truncation_error(deltaP):
-    plt.figure(figsize=(10,6))
-    for p, Δ in deltaP.items():
-        plt.plot(Δ, label=f'p = {p}')
-    plt.axhline(0, color='k', linestyle=':', linewidth=1.5,
-                label='No FMM error')
-    plt.xlabel('Timestep')
-    plt.ylabel('Δ(% Energy error) = FMM − brute-force')
-    plt.title('Isolated FMM Truncation Error vs. Expansion Order')
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-if __name__ == '__main__':
-    N        = 20
-    DT       = 0.01
-    STEPS    = 10
-    P_ORDERS = [3, 5, 7, 9, 12]
-
-    deltaP = run_comparison(N, DT, STEPS, P_ORDERS)
-    plot_truncation_error(deltaP)
+# Plot the errors clearly
+plt.figure(figsize=(8,5))
+plt.semilogy(p_values, errors, marker='o', linestyle='-', color='blue')
+plt.xlabel('Expansion Order (p)')
+plt.ylabel('Relative L2 Error')
+plt.title('FMM Relative Error vs Expansion Order p')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
