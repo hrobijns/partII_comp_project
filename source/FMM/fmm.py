@@ -137,20 +137,14 @@ def potential(particles, bbox=None, tree_thresh=2, nterms=5, boundary='wall'):
     """FMM evaluation of all‐to‐all Coulomb potential"""
     tree = build_tree(particles, tree_thresh, bbox=bbox, boundary=boundary)
     outer(tree.root, nterms)
-
-    # FIX: no far‐field outside the root — start with zero local expansion
     tree.root.inner = np.zeros_like(tree.root.outer)
-
-    # downward pass
     any(inner(child) for child in tree.root)
 
 
 def potentialFMM(tree, nterms=5):
     """FMM evaluation given a pre‐built quadtree"""
     outer(tree.root, nterms)
-
     tree.root.inner = np.zeros_like(tree.root.outer)
-
     any(inner(child) for child in tree.root)
 
 
