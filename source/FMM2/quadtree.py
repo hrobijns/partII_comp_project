@@ -183,9 +183,12 @@ class QuadTree():
         self._depth = None
 
     def _build_tree(self, points):
+        # 1) assign points, 2) split based on threshold
         self.root.add_points(points)
         self.root.thresh_split(self.threshold)
-        self.root.set_cneighbors()
+        # 3) only set Cartesian neighbors if we actually have children
+        if self.root._children is not None:
+            self.root.set_cneighbors()
 
     def __len__(self):
         l = len(self.root)
