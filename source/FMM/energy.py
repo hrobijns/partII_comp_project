@@ -4,9 +4,9 @@ from simulation import Particle, potential, potential_naive
 
 # Generate random particles
 np.random.seed(0)
-n_particles = 50
-positions = np.random.uniform(-1, 1, size=(n_particles, 2))
-charges = np.random.uniform(-1, 1, size=n_particles)
+n_particles = 100
+positions = np.random.uniform(-10, 10, size=(n_particles, 2))
+charges = np.random.uniform(1, 1, size=n_particles)
 
 # Compute exact potentials
 particles_naive = [Particle(x, y, q) for (x, y), q in zip(positions, charges)]

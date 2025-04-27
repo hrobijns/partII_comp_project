@@ -1,4 +1,5 @@
 from collections import deque
+import numpy as np 
 
 class QuadtreeNode:
     def __init__(self, boundary, threshold, parent=None):
@@ -104,53 +105,56 @@ def _touching(b1, b2):
                 y1_max < y2_min or y2_max < y1_min)
 
 def _shares_edge(b1, b2):
-    x1_min,x1_max,y1_min,y1_max = b1
-    x2_min,x2_max,y2_min,y2_max = b2
+    """Return True if two boxes share an edge (not just a corner)."""
+    x1_min, x1_max, y1_min, y1_max = b1
+    x2_min, x2_max, y2_min, y2_max = b2
 
-    # do they touch in x and overlap in y?
-    x_touch   = (x1_max == x2_min or x2_max == x1_min)
+    # Check for x-aligned touching
+    x_touch = (np.isclose(x1_max, x2_min) or np.isclose(x2_max, x1_min))
     x_overlap = not (y1_max <= y2_min or y2_max <= y1_min)
 
-    # or touch in y and overlap in x?
-    y_touch   = (y1_max == y2_min or y2_max == y1_min)
+    # Check for y-aligned touching
+    y_touch = (np.isclose(y1_max, y2_min) or np.isclose(y2_max, y1_min))
     y_overlap = not (x1_max <= x2_min or x2_max <= x1_min)
 
     return (x_touch and x_overlap) or (y_touch and y_overlap)
 
 
 def _assign_neighbors(root):
-    root.nearest_neighbors = []
-    root._interaction_set   = []
+    """Assign nearest neighbors and interaction sets in quadtree."""
+    root.nearest_neighbors = []   # The root has no neighbors by default.
+    root._interaction_set = []
 
     queue = deque([root])
+
     while queue:
         node = queue.popleft()
 
+        if node.is_leaf():
+            continue  # Nothing more to do at leaves
+
+        # For each child of the node
         for child in node.children:
-            neigh = []
-            # 1) siblings that share an edge
-            for sib in node.children:
-                if sib is not child and _shares_edge(sib.boundary, child.boundary):
-                    neigh.append(sib)
+            child.nearest_neighbors = []
+            child._interaction_set = []
 
-            # 2) cousins (children of your parent’s neighbors)
-            for pnb in node.nearest_neighbors:
-                for cousin in pnb.children:
-                    if _shares_edge(cousin.boundary, child.boundary):
-                        neigh.append(cousin)
+            # 1. Siblings (direct neighbors)
+            for sibling in node.children:
+                if sibling is not child and _shares_edge(child.boundary, sibling.boundary):
+                    child.nearest_neighbors.append(sibling)
 
-            child.nearest_neighbors = neigh
+            # 2. Cousins (parent's nearest neighbors' children)
+            for pn in node.nearest_neighbors:
+                if not pn.is_leaf():
+                    for cousin in pn.children:
+                        if _shares_edge(child.boundary, cousin.boundary):
+                            child.nearest_neighbors.append(cousin)
 
-            # Interaction = all cousins *minus* any you just called “neighbors”
-            iset = []
-            for pnb in node.nearest_neighbors:
-                for cousin in pnb.children:
-                    # if they touch at all (corner or edge),
-                    # but didn’t make the neighbour list,
-                    # they’re well separated:
-                    if _touching(cousin.boundary, child.boundary) \
-                       and cousin not in neigh:
-                        iset.append(cousin)
+            # 3. Interaction set = touching but not nearest neighbor
+            for pn in node.nearest_neighbors:
+                if not pn.is_leaf():
+                    for cousin in pn.children:
+                        if _touching(child.boundary, cousin.boundary) and cousin not in child.nearest_neighbors:
+                            child._interaction_set.append(cousin)
 
-            child._interaction_set = iset
             queue.append(child)

@@ -14,7 +14,7 @@ class Particle:
         self.x = x
         self.y = y
         self.pos = (x, y)
-        self.q = q
+        self.q = 1
         self.phi = 0.0
         self.fx = 0.0
         self.fy = 0.0
@@ -48,21 +48,31 @@ def inner(tnode):
     if tnode.parent is not None:
         z0 = complex(*tnode.parent.center) - complex(*tnode.center)
         tnode.inner = kernels.L2L(tnode.parent.inner, z0)
+    else:
+        tnode.inner = np.zeros(len(tnode.outer), dtype=complex)
     # Add interactions from well-separated cells
+    print(f"Interaction set size: {len(tnode.interaction_set)}")
+    
     for tin in tnode.interaction_set:
+        print("Performing M2L expansion")
         z0 = complex(*tin.center) - complex(*tnode.center)
         tnode.inner += kernels.M2L(tin.outer, z0)
 
     if tnode.is_leaf():
+        print(f"Leaf at {tnode.center}:")
+        print(f"  Number of particles in cell: {len(tnode.get_points())}")
+        print(f"  Number of nearest neighbors: {len(tnode.nearest_neighbors)}")
+        print(f"  Number of interaction set: {len(tnode.interaction_set)}")
+
         zc = complex(*tnode.center)
         for p in tnode.get_points():
             z = complex(*p.pos)
-            # potential via local expansion
             phi_loc = np.real(sum(
                 tnode.inner[j] * (z - zc)**j
                 for j in range(len(tnode.inner))
             ))
-            p.phi += k * p.q * phi_loc
+            p.phi += k * phi_loc
+
             # field = derivative of local expansion
             deriv = [j * tnode.inner[j] for j in range(1, len(tnode.inner))]
             E = np.polyval(deriv[::-1], z - zc)
@@ -71,19 +81,16 @@ def inner(tnode):
             p.fx += p.q * Ex
             p.fy += p.q * Ey
 
-        # Direct interactions with near neighbors
+        # First: direct sums inside the same leaf
+        force_naive(tnode.get_points())
+        potential_naive(tnode.get_points())
+
+        # Second: direct sums with near neighbors
         for nn in tnode.nearest_neighbors:
             force_naive(tnode.get_points(), nn.get_points())
             potential_naive(tnode.get_points(), nn.get_points())
-        # Direct all-to-all inside this cell
-        force_naive(tnode.get_points())
-        potential_naive(tnode.get_points())
-    else:
-        for child in tnode:
-            inner(child)
 
-
-def potential(particles, tree_thresh=5, bbox=None, p_order=5):
+def potential(particles, tree_thresh=1, bbox=None, p_order=5):
     """Fast Multipole Method evaluation: resets and computes phi & forces."""
     for p in particles:
         p.phi = p.fx = p.fy = 0.0
@@ -198,7 +205,7 @@ class Simulation:
     def compute_forces(self):
         for b in self.bodies:
             b.phi = b.fx = b.fy = 0.0
-        potential(self.bodies, tree_thresh=5, p_order=self.nterms)
+        potential(self.bodies, tree_thresh=1, p_order=self.nterms)
         return [np.array((b.fx, b.fy), dtype=float) for b in self.bodies]
 
 class Animation:
@@ -244,7 +251,7 @@ if __name__ == "__main__":
     np.random.seed(42)
     bodies = [
         Body(
-            position=np.random.uniform(-10, 10, 2),
+            position=np.random.uniform(-1, 1, 2),
             velocity=np.random.uniform(-2, 2, 2),
             mass=np.random.uniform(0.1, 1.0)
         )

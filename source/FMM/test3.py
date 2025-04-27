@@ -1,13 +1,10 @@
 import numpy as np
 from simulation import Particle, potential, potential_naive
 
-# Define 5 particles explicitly
+# Define more particles, scattered
+np.random.seed(42)
 particles = [
-    Particle(0.0, 0.0, 1.0),
-    Particle(2.0, 0.0, -1.0),
-    Particle(1.0, 1.0, 0.5),
-    Particle(-1.0, -1.0, -0.5),
-    Particle(-2.0, 2.0, 1.5)
+    Particle(x, y, 1.0) for x, y in np.random.uniform(-5, 5, (30, 2))
 ]
 
 # Compute exact potentials (naive method)
