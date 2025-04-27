@@ -1,3 +1,9 @@
+'''
+Implementation of the 2D Fast Multipole Method for a Coulomb potential
+'''
+
+__author__ = 'Luis Barroso-Luque'
+
 from itertools import chain
 import numpy as np
 from scipy.special import binom
@@ -61,23 +67,14 @@ def _outer_mpexp(tnode, nterms):
 
 
 def _convert_oi(coeffs, z0):
-    """
-    Convert multipole (outer) → local (inner) expansion about z0.
-    THIS VERSION DROPS the incorrect (-1)**k!
-    """
+    """Convert outer to inner expansion about z0"""
+
     inner = np.empty_like(coeffs)
-    # monopole + higher terms, no alternating sign
-    inner[0] = sum(coeffs[k] / z0**k for k in range(1, len(coeffs))) \
-               + coeffs[0] * np.log(-z0)
-    # l >= 1
-    inner[1:] = [
-        (1.0 / z0**l) * sum(
-            coeffs[k] / z0**k * binom(l + k - 1, k - 1)
-            for k in range(1, len(coeffs))
-        )
-        - coeffs[0] / (z0**l * l)
-        for l in range(1, len(coeffs))
-    ]
+    inner[0] = (sum([(coeffs[k]/z0**k)*(-1)**k for k in range(1, len(coeffs))]) +
+          coeffs[0]*np.log(-z0))
+    inner[1:] = [(1/z0**l)*sum([(coeffs[k]/z0**k)*binom(l+k-1, k-1)*(-1)**k
+                 for k in range(1, len(coeffs))]) - coeffs[0]/((z0**l)*l)
+                 for l in range(1, len(coeffs))]
     return inner
 
 
@@ -91,58 +88,46 @@ def _shift_texp(coeffs, z0):
 
 
 def _inner(tnode):
-    """
-    Downward pass: form local expansions and accumulate
-    potentials at the leaves.
-    """
-    # 1) If this node has a parent, shift & M2L
-    if tnode.parent is not None:
-        # Shift parent's local expansion down to this cell
-        dz = complex(*tnode.parent.center) - complex(*tnode.center)
-        tnode.inner = _shift_texp(tnode.parent.inner, dz)
+    """Compute the inner expansions for all cells recursively and potential
+    for all particles"""
 
-        # Add in multipole-to-local translations from each interaction cell
-        for nbr in tnode.interaction_set():
-            dz2 = complex(*nbr.center) - complex(*tnode.center)
-            tnode.inner += _convert_oi(nbr.outer, dz2)
+    z0 = complex(*tnode.parent.center) - complex(*tnode.center) # check sign
+    tnode.inner = _shift_texp(tnode.parent.inner, z0)
+    for tin in tnode.interaction_set():
+        z0 = complex(*tin.center) - complex(*tnode.center)
+        tnode.inner += _convert_oi(tin.outer, z0)
 
-    # 2) Now if this cell is a leaf, do all the actual potential work
     if tnode.is_leaf():
-        # 2a) Far field: evaluate the local (Taylor) expansion
-        zc = complex(*tnode.center)
+        # Compute potential due to all far enough particles
+        z0, coeffs = complex(*tnode.center), tnode.inner
         for p in tnode.get_points():
-            zp = complex(*p.pos)
-            # polyval wants highest-order first, so reverse
-            p.phi -= np.real(np.polyval(tnode.inner[::-1], zp - zc))
+            z = complex(*p.pos)
+            p.phi -= np.real(np.polyval(coeffs[::-1], z-z0))
+        # Compute potential directly from particles in interaction set
+        for nn in tnode.nearest_neighbors:
+            potentialDDS(tnode.get_points(), nn.get_points())
 
-        # 2b) Near field: direct‐sum against all neighbors
-        for neigh in tnode.nearest_neighbors:
-            potentialDDS(tnode.get_points(), neigh.get_points())
-
-        # 2c) Self‐leaf interactions: direct‐sum among points in this leaf
+        # Compute all-to-all potential from all particles in leaf cell
         _ = potentialDS(tnode.get_points())
-
     else:
-        # 3) Not a leaf: recurse on children
         for child in tnode:
             _inner(child)
 
 
 def potential(particles, bbox=None, tree_thresh=None, nterms=5, boundary='wall'):
+    """Fast Mulitipole Method evaluation of all-to-all potential"""
+
     tree = build_tree(particles, tree_thresh, bbox=bbox, boundary=boundary)
-    # 1) upward pass: compute all the multipole expansions
     _outer_mpexp(tree.root, nterms)
-    # 2) initialize the root's local expansion
-    tree.root.inner = np.zeros((nterms + 1,), dtype=complex)
-    # 3) downward pass: always call _inner on the root
-    _inner(tree.root)
+    tree.root.inner = np.zeros((nterms + 1), dtype=complex)
+    any(_inner(child) for child in tree.root)
 
 
 def potentialFMM(tree, nterms=5):
-    # same but tree prebuilt
+    """Same as above but takes a prebuilt tree"""
     _outer_mpexp(tree.root, nterms)
-    tree.root.inner = np.zeros((nterms + 1,), dtype=complex)
-    _inner(tree.root)
+    tree.root.inner = np.zeros((nterms + 1), dtype=complex)
+    any(_inner(child) for child in tree.root)
 
 
 def potentialDDS(particles, sources):

@@ -1,47 +1,48 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from simulation import Particle, potential, potential_naive
 
-# Generate random particles
-np.random.seed(0)
-n_particles = 100
-positions = np.random.uniform(-10, 10, size=(n_particles, 2))
-charges = np.random.uniform(1, 1, size=n_particles)
+from fmm import potential, potentialDS, Particle
 
-# Compute exact potentials
-particles_naive = [Particle(x, y, q) for (x, y), q in zip(positions, charges)]
-for p in particles_naive:
-    p.phi = 0.0
-potential_naive(particles_naive)
-phi_exact = np.array([p.phi for p in particles_naive])
+def compute_error(xs, ys, qs, nterms_list, tree_thresh=50, bbox=None, boundary='wall'):
+    # Ground-truth via direct sum
+    particles_ds = [Particle(x, y, q) for x, y, q in zip(xs, ys, qs)]
+    phi_ds = potentialDS(particles_ds)
 
-# Test range of p values
-p_values = range(1, 16)
-errors = []
+    errors = []
+    for nterms in nterms_list:
+        # Fresh particles for each FMM run
+        particles_fmm = [Particle(x, y, q) for x, y, q in zip(xs, ys, qs)]
+        potential(particles_fmm,
+                  nterms=nterms,
+                  tree_thresh=tree_thresh,
+                  bbox=bbox,
+                  boundary=boundary)
+        phi_fmm = np.array([p.phi for p in particles_fmm])
 
-for p_order in p_values:
-    # Reset particles for FMM each time
-    particles_fmm = [Particle(x, y, q) for (x, y), q in zip(positions, charges)]
-    for p_fmm in particles_fmm:
-        p_fmm.phi = 0.0
+        # relative L2 error
+        err = np.linalg.norm(phi_fmm - phi_ds) / np.linalg.norm(phi_ds)
+        print(f"nterms={nterms:2d} → rel L2 error = {err:.3e}")
+        errors.append(err)
+    return errors
 
-    # Compute potentials using FMM
-    potential(particles_fmm, tree_thresh=1, p_order=p_order)
+if __name__ == "__main__":
+    # reproducible random set
+    np.random.seed(42)
+    N = 500
+    xs = np.random.rand(N)
+    ys = np.random.rand(N)
+    qs = np.random.randn(N)
 
-    phi_fmm = np.array([particle.phi for particle in particles_fmm])
+    nterms_list = list(range(1, 11))  # try orders 1 through 10
+    print("Computing relative errors:")
+    errors = compute_error(xs, ys, qs, nterms_list, tree_thresh=2)
 
-    # Calculate relative L2 error
-    err = np.linalg.norm(phi_fmm - phi_exact) / np.linalg.norm(phi_exact)
-    errors.append(err)
-
-    print(f"p={p_order}, error={err:.6f}")
-
-# Plot the errors clearly
-plt.figure(figsize=(8,5))
-plt.semilogy(p_values, errors, marker='o', linestyle='-', color='blue')
-plt.xlabel('Expansion Order (p)')
-plt.ylabel('Relative L2 Error')
-plt.title('FMM Relative Error vs Expansion Order p')
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+    # plot on a semilog-y scale
+    plt.figure(figsize=(6,4))
+    plt.semilogy(nterms_list, errors, marker='o')
+    plt.xlabel("Multipole expansion order")
+    plt.ylabel("Relative $L^2$ error")
+    plt.title("FMM accuracy vs expansion order")
+    plt.grid(True, which='both')
+    plt.tight_layout()
+    plt.show()

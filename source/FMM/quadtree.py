@@ -1,159 +1,228 @@
-from collections import deque
-import numpy as np 
+'''
+Implementation of a quadtree points structure for use in the fast multipole method.
+'''
 
-class QuadtreeNode:
-    def __init__(self, boundary, threshold, parent=None):
-        # boundary: (x_min, x_max, y_min, y_max)
-        self.boundary = boundary
-        self.threshold = threshold
+__author__ = 'Luis Barroso-Luque'
+
+import numpy as np
+from itertools import chain
+
+eps = 7./3 - 4./3 -1
+
+def _loopchildren(parent):
+    for child in parent._children:
+        if child._children:
+            for subchild in _loopchildren(child):
+                yield subchild
+        yield child
+
+
+class Node():
+    """Single Tree Node"""
+
+    # Can we implement this in a less hacky way? Maybe with some permutations?
+    # When looking for nearest neighbors if the cardinal neighbors of a cell
+    # are larger then that cell and the corresponding neigbor index for the given
+    # Child index is in DISREGARD then don't skip looking for corner neighbors
+    # DISREGARD = (child index->cneighbor index)
+    DISREGARD = (1,2,0,3)
+    # Again when a cardinal neighbor is larger than cell then look for the
+    # child given by the table for the given cneighbor index
+    # CORNER_CHILDREN = {cneighbor index: child index of neigbor}
+    CORNER_CHILDREN = (3, 2, 0, 1)
+
+
+    def __init__(self, width, height, x0, y0, points=None,
+                 children=None, parent=None, level=0):
+
+        self._points = []
+        self._children = children
+        self._cneighbors = 4*[None,]
+        self._nneighbors = None
+        self._cindex = 0
         self.parent = parent
-        self.particles = []
-        self.children = []  # NW, NE, SW, SE
-        self.nearest_neighbors = []
-        self._interaction_set = []
+        self.x0, self.y0, self.w, self.h = x0, y0, width, height
+        self.verts = ((x0, x0 + width), (y0, y0 + height))
+        self.center = (x0 + width/2, y0 + height/2)
+        self.level = level
+        self.inner, self.outer = None, None
 
-    @property
-    def center(self):
-        x_min, x_max, y_min, y_max = self.boundary
-        return ((x_min + x_max) / 2, (y_min + y_max) / 2)
-
-    def is_leaf(self):
-        return len(self.children) == 0
-
-    def get_points(self):
-        return self.particles if self.is_leaf() else []
+        if points is not None:
+            self.add_points(points)
 
     def __iter__(self):
-        return iter(self.children)
+        if self._has_children():
+            for child in self._children:
+                yield child
 
-    def insert(self, particle):
-        if self.is_leaf():
-            if len(self.particles) < self.threshold:
-                self.particles.append(particle)
-                return
-            # subdivide
-            self.subdivide()
-            for p in self.particles:
-                self._insert_into_children(p)
-            self.particles = []
-        self._insert_into_children(particle)
+    def __len__(self):
+        if self._points is not None:
+            return len(self._points)
+        return 0
 
-    def _insert_into_children(self, particle):
-        x, y = particle.pos
-        x_mid, y_mid = self.center
+    def _has_children(self):
+        return (self._children is not None)
 
-        if x <= x_mid:
-            if y <= y_mid:
-                idx = 2  # SW
-            else:
-                idx = 0  # NW
+    def _get_child(self, i):
+        if self._children is None:
+            return self
+        return self._children[i]
+
+    def _split(self):
+        if self._has_children():
+            return
+
+        w = self.w/2
+        h = self.h/2
+        x0, y0 = self.verts[0][0], self.verts[1][0]
+
+        # Create children order [NW, NE, SW, SE] -> [0,1,2,3]
+        self._children = [Node(w, h, xi, yi, points=self._points,
+                               level=self.level+1, parent=self)
+                          for yi in (y0 + h, y0) for xi in (x0, x0 + w)]
+        # part of that terrible DISREGARD hack
+        for i, c in enumerate(self._children):
+            c._cindex = i
+
+        #self._points = None
+        #self.set_cneighbors()
+
+    def _contains(self, x, y):
+        return ((x >= self.verts[0][0] and x < self.verts[0][1]) and
+                (y >= self.verts[1][0] and y < self.verts[1][1]))
+
+    def is_leaf(self):
+        return (self._children is None)
+
+    def thresh_split(self, thresh):
+        if len(self) > thresh:
+            self._split()
+        if self._has_children():
+            for child in self._children:
+                child.thresh_split(thresh)
+            #self.set_cneighbors()
+
+    def set_cneighbors(self):
+        for i, child in enumerate(self._children):
+            # Set sibling neighbors
+            sn = (abs(1 + (i^1) - i), abs(1 + (i^2) - i))
+            child._cneighbors[sn[0]] = self._children[i^1]
+            child._cneighbors[sn[1]] = self._children[i^2]
+            # Set other neighbors from parents neighbors
+            pn = tuple(set((0,1,2,3)) - set((sn)))
+            nc = lambda j, k: j^((k+1)%2+1)
+            child._cneighbors[pn[0]] = (self._cneighbors[pn[0]]._get_child(nc(i, pn[1]))
+                                        if self._cneighbors[pn[0]] is not None
+                                        else None)
+            child._cneighbors[pn[1]] = (self._cneighbors[pn[1]]._get_child(nc(i, pn[0]))
+                                        if self._cneighbors[pn[1]] is not None
+                                        else None)
+            # Recursively set cneighbors
+            if child._has_children():
+                child.set_cneighbors()
+
+    def add_points(self, points):
+        if self._has_children():
+            for child in self._children:
+                child.add_points(points)
         else:
-            if y <= y_mid:
-                idx = 3  # SE
-            else:
-                idx = 1  # NE
+            for d in points:
+                if self._contains(d.x, d.y):
+                    self._points.append(d)
 
-        self.children[idx].insert(particle)
+    def get_points(self):
+        return self._points
+        #if self._has_children():
+        #    return chain(*(child.get_points() for child in self._children))
+        #else:
+        #    return self._points
 
-    def subdivide(self):
-        x_min, x_max, y_min, y_max = self.boundary
-        x_mid, y_mid = self.center
-        # NW, NE, SW, SE
-        self.children = [
-            QuadtreeNode((x_min, x_mid, y_mid, y_max), self.threshold, parent=self),
-            QuadtreeNode((x_mid, x_max, y_mid, y_max), self.threshold, parent=self),
-            QuadtreeNode((x_min, x_mid, y_min, y_mid), self.threshold, parent=self),
-            QuadtreeNode((x_mid, x_max, y_min, y_mid), self.threshold, parent=self),
-        ]
+    def traverse(self):
+        if self._has_children():
+            for child in _loopchildren(self):
+                yield child
 
     @property
+    def nearest_neighbors(self):
+        if self._nneighbors is not None:
+            return self._nneighbors
+
+        # Find remaining nearest neighbors of same level
+        nn = [cn._cneighbors[(i+1)%4]
+              for i, cn in enumerate(self._cneighbors)
+              if cn is not None and cn.level == self.level]
+        # Find remaining nearest neigbor at lower levels #So hacky!
+        nn += [cn._cneighbors[(i+1)%4]._get_child(self.CORNER_CHILDREN[i])
+               for i, cn in enumerate(self._cneighbors)
+               if cn is not None and cn._cneighbors[(i+1)%4] is not None and
+               (cn.level < self.level and i != self.DISREGARD[self._cindex])]
+
+        nn = [n for n in self._cneighbors + nn if n is not None]
+        self._nneighbors = nn
+        return nn
+
     def interaction_set(self):
-        return self._interaction_set
+        nn, pn = self.nearest_neighbors, self.parent.nearest_neighbors
+        int_set = []
+        for n in pn:
+            if n._has_children():
+                int_set += [c for c in n if c not in nn]
+            elif n not in nn:
+                int_set.append(n)
+        return int_set
 
 
-def build_tree(particles, tree_thresh, bbox=None):
-    # determine bounding box
-    if bbox:
-        x_min, x_max, y_min, y_max = bbox
-    else:
-        xs = [p.x for p in particles]
-        ys = [p.y for p in particles]
-        x_min, x_max = min(xs), max(xs)
-        y_min, y_max = min(ys), max(ys)
-        dx, dy = x_max - x_min, y_max - y_min
-        if dx > dy:
-            y_max = y_min + dx
+class QuadTree():
+    """Quad Tree Class"""
+
+    def __init__(self, points, thresh, bbox=(1,1), boundary='wall'):
+        self.threshold = thresh
+        self.root = Node(*bbox, 0, 0)
+        if boundary == 'periodic':
+            self.root._cneighbors = 4*[self.root,]
+        elif boundary == 'wall':
+            self.root._cneighbors = 4*[None,]
         else:
-            x_max = x_min + dy
-        pad = 1e-6 * max(dx, dy)
-        x_min, x_max = x_min - pad, x_max + pad
-        y_min, y_max = y_min - pad, y_max + pad
+            raise AttributeError('Boundary of type {} is'
+                                 ' not recognized'.format(boundary))
+        self._build_tree(points)
+        self._depth = None
 
-    root = QuadtreeNode((x_min, x_max, y_min, y_max), tree_thresh)
-    for p in particles:
-        root.insert(p)
+    def _build_tree(self, points):
+        self.root.add_points(points)
+        self.root.thresh_split(self.threshold)
+        self.root.set_cneighbors()
 
-    _assign_neighbors(root)
-    return type('Tree', (), {'root': root})()
+    def __len__(self):
+        l = len(self.root)
+        for node in self.root.traverse():
+            l += len(node)
+        return l
+
+    def __iter__(self):
+        for points in self.root.get_points():
+            yield points
+
+    @property
+    def depth(self):
+        if self._depth is None:
+            self._depth = max([node.level for node in self.root.traverse()])
+        return self._depth
+
+    @property
+    def nodes(self):
+        return [node for node in self.root.traverse()]
+
+    def traverse_nodes(self):
+        for node in self.root.traverse():
+            yield node
 
 
-def _touching(b1, b2):
-    x1_min, x1_max, y1_min, y1_max = b1
-    x2_min, x2_max, y2_min, y2_max = b2
-    return not (x1_max < x2_min or x2_max < x1_min or
-                y1_max < y2_min or y2_max < y1_min)
+def build_tree(points, tree_thresh=None, bbox=None, boundary='wall'):
+    if bbox is None:
+        coords = np.array([(p.x, p.y) for p in points])
+        bbox = (max(coords[:, 0]) + eps, max(coords[:, 1]) + eps)
+    if tree_thresh is None:
+        tree_thresh = 5#max(len(points)//10, 5)  # Something less error prone?
 
-def _shares_edge(b1, b2):
-    """Return True if two boxes share an edge (not just a corner)."""
-    x1_min, x1_max, y1_min, y1_max = b1
-    x2_min, x2_max, y2_min, y2_max = b2
-
-    # Check for x-aligned touching
-    x_touch = (np.isclose(x1_max, x2_min) or np.isclose(x2_max, x1_min))
-    x_overlap = not (y1_max <= y2_min or y2_max <= y1_min)
-
-    # Check for y-aligned touching
-    y_touch = (np.isclose(y1_max, y2_min) or np.isclose(y2_max, y1_min))
-    y_overlap = not (x1_max <= x2_min or x2_max <= x1_min)
-
-    return (x_touch and x_overlap) or (y_touch and y_overlap)
-
-
-def _assign_neighbors(root):
-    """Assign nearest neighbors and interaction sets in quadtree."""
-    root.nearest_neighbors = []   # The root has no neighbors by default.
-    root._interaction_set = []
-
-    queue = deque([root])
-
-    while queue:
-        node = queue.popleft()
-
-        if node.is_leaf():
-            continue  # Nothing more to do at leaves
-
-        # For each child of the node
-        for child in node.children:
-            child.nearest_neighbors = []
-            child._interaction_set = []
-
-            # 1. Siblings (direct neighbors)
-            for sibling in node.children:
-                if sibling is not child and _shares_edge(child.boundary, sibling.boundary):
-                    child.nearest_neighbors.append(sibling)
-
-            # 2. Cousins (parent's nearest neighbors' children)
-            for pn in node.nearest_neighbors:
-                if not pn.is_leaf():
-                    for cousin in pn.children:
-                        if _shares_edge(child.boundary, cousin.boundary):
-                            child.nearest_neighbors.append(cousin)
-
-            # 3. Interaction set = touching but not nearest neighbor
-            for pn in node.nearest_neighbors:
-                if not pn.is_leaf():
-                    for cousin in pn.children:
-                        if _touching(child.boundary, cousin.boundary) and cousin not in child.nearest_neighbors:
-                            child._interaction_set.append(cousin)
-
-            queue.append(child)
+    return QuadTree(points, tree_thresh, bbox=bbox, boundary=boundary)
