@@ -40,7 +40,6 @@ class QuadtreeNode:
 
     def _insert_into_children(self, particle):
         x, y = particle.pos
-        x_min, x_max, y_min, y_max = self.boundary
         x_mid, y_mid = self.center
 
         if x <= x_mid:
