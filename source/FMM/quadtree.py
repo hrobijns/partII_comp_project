@@ -9,6 +9,8 @@ class QuadNode:
         self.children = []    # four sub‐cells
         self.neighbors        = []  # near‐field (adjacent) cells at same level
         self.interaction_list = []  # far‐field (non-adjacent) cells at same level
+        self.outer = None   # holds multipole expansion
+        self.inner = None   # holds local (Taylor) expansion    
 
     def is_leaf(self):
         return len(self.children) == 0 # boolean as to whether a cell is a leaf

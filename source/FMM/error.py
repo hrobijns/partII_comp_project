@@ -46,8 +46,7 @@ def main():
         phi_fmm = potential(particles, tree_thresh=2, nterms=n)
 
         # relative L2 error (%) 
-        rel_err = np.linalg.norm(phi_fmm - phi_ref) \
-                  / np.linalg.norm(phi_ref) * 100
+        rel_err = np.linalg.norm(phi_fmm - phi_ref) / np.linalg.norm(phi_ref) * 100
         errors.append(rel_err)
 
     # print results
