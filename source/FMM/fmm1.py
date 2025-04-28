@@ -1,14 +1,14 @@
 from itertools import chain
 import numpy as np
 from scipy.special import binom
-from quadtree import build_tree
+from quadtree1 import QuadTree
 
 
 class Point:
     """Point in 2D"""
     def __init__(self, x, y):
         self.x, self.y = x, y
-        self.pos = (x, y)
+        self.position = (x, y)
 
 
 class Particle(Point):
@@ -109,7 +109,7 @@ def inner(tnode):
         tnode.inner = L2L(tnode.parent.inner, z0)
 
         # 2) add contributions from each interaction cell
-        for tin in tnode.interaction_set():
+        for tin in tnode.interaction_list:
             z0 = complex(*tnode.center) - complex(*tin.center)
             tnode.inner += M2L(tin.outer, z0)
 
@@ -119,11 +119,11 @@ def inner(tnode):
         zc = complex(*tnode.center)
         coeffs = tnode.inner
         for p in tnode.get_points():
-            z = complex(*p.pos)
+            z = complex(*p.position)
             p.phi -= np.real(np.polyval(coeffs[::-1], z - zc))
 
         # near‐field direct sums from neighbors
-        for nn in tnode.nearest_neighbors:
+        for nn in tnode.neighbors:
             potentialDDS(tnode.get_points(), nn.get_points())
 
         # self‐leaf direct sum
@@ -133,9 +133,18 @@ def inner(tnode):
             inner(child)
 
 
-def potential(particles, bbox=None, tree_thresh=2, nterms=5, boundary='wall'):
+def potential(particles, tree_thresh=2, nterms=5):
     """FMM evaluation of all‐to‐all Coulomb potential"""
-    tree = build_tree(particles, tree_thresh, bbox=bbox, boundary=boundary)
+    
+    xs = [p.x for p in particles]
+    ys = [p.y for p in particles]
+    x_min, y_min, x_max, y_max = min(xs), min(ys), max(xs), max(ys)
+
+    # tree_thresh → max points per leaf
+    tree = QuadTree(particles,
+                boundary=(x_min,y_min,x_max,y_max),
+                max_points=tree_thresh)
+
     outer(tree.root, nterms)
     tree.root.inner = np.zeros_like(tree.root.outer)
     any(inner(child) for child in tree.root)
@@ -152,7 +161,7 @@ def potentialDDS(particles, sources):
     """Direct sum from external sources"""
     for p in particles:
         for s in sources:
-            r = distance(p.pos, s.pos)
+            r = distance(p.position, s.position)
             p.phi -= p.q * np.log(r)
 
 
@@ -160,7 +169,7 @@ def potentialDS(particles):
     """Direct sum among particles in same leaf"""
     for i, pi in enumerate(particles):
         for pj in particles[:i] + particles[i+1:]:
-            r = distance(pi.pos, pj.pos)
+            r = distance(pi.position, pj.position)
             pi.phi -= pi.q * np.log(r)
     # return array if needed
     return np.array([p.phi for p in particles])
