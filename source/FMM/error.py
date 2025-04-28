@@ -14,14 +14,14 @@ def naive_potential(particles):
         for j, s in enumerate(particles):
             if i == j:
                 continue
-            # tiny epsilon to avoid log(0)
-            r = np.hypot(p.x - s.x, p.y - s.y) + 1e-9
+            # softening
+            r = np.hypot(p.x - s.x, p.y - s.y) + 1e-2
             phi[i] -= s.q * np.log(r)
     return phi
 
 def main():
     np.random.seed(42)
-    N = 100
+    N = 200
 
     # generate random particles in [0,1]^2 with random charges
     particles = [
@@ -43,11 +43,12 @@ def main():
             p.phi = 0.0
 
         # compute via your FMM
-        phi_fmm = potential(particles, tree_thresh=2, nterms=n)
+        phi_fmm = potential(particles, tree_thresh=3, nterms=n)
 
         # relative L2 error (%) 
         rel_err = np.linalg.norm(phi_fmm - phi_ref) / np.linalg.norm(phi_ref) * 100
         errors.append(rel_err)
+        print (f'p = {n}, relative error = {rel_err} %')
 
     # print results
     df = pd.DataFrame({
