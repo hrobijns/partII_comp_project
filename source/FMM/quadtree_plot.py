@@ -53,8 +53,8 @@ def draw_grid_at_level(ax, node: QuadNode, target_level: int, greyed: List[QuadN
 def main():
     random.seed(42)
 
-    # 1) Generate 30 random body positions
-    bodies = [Body((random.random(), random.random())) for _ in range(1000)]
+    # 1) Generate 300 random body positions
+    bodies = [Body((random.random(), random.random())) for _ in range(300)]
 
     # 2) Build the uniform quadtree (~1–5 points per leaf)
     qt = QuadTree(bodies, boundary=(0,0,1,1), max_per_leaf=3)
@@ -113,12 +113,13 @@ def main():
             ))
         handled.extend(node.interaction_list)
 
-        ax.set_title(f"Level {level}")
+        # Increase title font size for clarity
+        ax.set_title(f"Level {level}", fontsize=24)
         ax.set_aspect("equal")
         ax.set_xlim(0,1)
         ax.set_ylim(0,1)
         ax.axis("off")
-
+    #plt.savefig('figures/FMMinteractionlist.png', dpi=300)
     plt.show()
 
 if __name__ == "__main__":

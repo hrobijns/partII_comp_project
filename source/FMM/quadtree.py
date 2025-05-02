@@ -1,146 +1,149 @@
+from typing import List, Tuple, Optional, Dict, Any
+
+
 class QuadNode:
-    """A single a node in a quadtree"""
-    def __init__(self, x_min, y_min, x_max, y_max, level=0, parent=None):
+    """A single node in a quadtree."""
+    def __init__(
+        self,
+        x_min: float,
+        y_min: float,
+        x_max: float,
+        y_max: float,
+        level: int = 0,
+        parent: Optional["QuadNode"] = None
+    ):
         self.x_min, self.y_min = x_min, y_min
         self.x_max, self.y_max = x_max, y_max
         self.level    = level
-        self.parent   = parent # i.e None for root cell
-        self.points   = []    # bodies in this cell
-        self.children = []    # four sub‐cells
-        self.neighbors        = []  # near‐field (adjacent) cells at same level
-        self.interaction_list = []  # far‐field (non-adjacent) cells at same level
-        self.outer = None   # holds multipole expansion
-        self.inner = None   # holds local (Taylor) expansion    
+        self.parent   = parent    # None for root
+        self.points   = []        # bodies in this cell
+        self.children: List[QuadNode] = []
+        self.neighbors: List[QuadNode] = []        # same-level adjacent cells
+        self.interaction_list: List[QuadNode] = [] # same-level non-adjacent cells
+        self.outer = None   # multipole expansion
+        self.inner = None   # local (Taylor) expansion
 
-    def is_leaf(self):
-        return len(self.children) == 0 # boolean as to whether a cell is a leaf
+    def is_leaf(self) -> bool:
+        return not self.children
 
-    def contains(self, pos):
+    def contains(self, pos: Tuple[float, float]) -> bool:
         x, y = pos
         return (self.x_min <= x <= self.x_max) and (self.y_min <= y <= self.y_max)
-        # boolean as to whether a position is within a cell
 
     @property
-    def center(self):
+    def center(self) -> Tuple[float, float]:
         return ((self.x_min + self.x_max) * 0.5,
                 (self.y_min + self.y_max) * 0.5)
 
-    def subdivide(self):
-        """Subdividing a node into its four children"""
-        xm = 0.5*(self.x_min + self.x_max)
-        ym = 0.5*(self.y_min + self.y_max)
-        # create 4 children
+    def subdivide(self) -> None:
+        """Split this node into 4 children."""
+        xm = 0.5 * (self.x_min + self.x_max)
+        ym = 0.5 * (self.y_min + self.y_max)
         self.children = [
             QuadNode(self.x_min, self.y_min, xm,     ym,     self.level+1, self),
             QuadNode(xm,         self.y_min, self.x_max, ym,     self.level+1, self),
             QuadNode(self.x_min, ym,         xm,     self.y_max, self.level+1, self),
             QuadNode(xm,         ym,         self.x_max, self.y_max, self.level+1, self),
         ]
-        # re‐distribute any existing points
-        for p in self.points:
-            for c in self.children:
-                if c.contains(p.position):
-                    c.points.append(p)
-                    break
-        self.points = []
-
-    def insert(self, body, max_points):
-        """Insert a body into a node"""
-        if not self.contains(body.position):
-            return False
-        if self.is_leaf() and len(self.points) < max_points:
-            self.points.append(body)
-            return True
-        if self.is_leaf():
-            self.subdivide()
-        for c in self.children:
-            if c.insert(body, max_points):
-                return True
-        return False
-
-    def __iter__(self):
-        """Allows for iteration through children of the node"""
-        return iter(self.children)
-
-    def get_points(self):
-        """Return all bodies in this node (including children)"""
-        if self.is_leaf():
-            return list(self.points)
-        pts = []
-        for c in self.children:
-            pts.extend(c.get_points())
-        return pts
+        # no redistribution here (we distribute after uniform build)
 
 
 class QuadTree:
-    def __init__(self, bodies, boundary, max_points=1):
-        """
-        bodies     : iterable with position (2-tuple) and any data you like (e.g. charge)
-        boundary   : (x_min, y_min, x_max, y_max)
-        max_points : maximum bodies per leaf before subdivision
-        """
+    """Fully symmetric quadtree with uniform leaf size based on max points per leaf."""
+    def __init__(
+        self,
+        bodies: List[Any],
+        boundary: Tuple[float, float, float, float],
+        max_per_leaf: int = 5
+    ):
         x_min, y_min, x_max, y_max = boundary
-        self.root       = QuadNode(x_min, y_min, x_max, y_max)
-        self.max_points = max_points
+        self.root = QuadNode(x_min, y_min, x_max, y_max)
+        self.bodies = bodies
+        n = len(bodies)
+        # determine uniform subdivision depth
+        depth = 0
+        while n / (4 ** depth) > max_per_leaf:
+            depth += 1
+        self.depth = depth
 
-        # build the tree
+        # uniformly subdivide every node to that depth
+        self._uniform_subdivide(self.root, depth)
+
+        # distribute bodies into leaves
         for b in bodies:
-            inserted = self.root.insert(b, max_points)
-            if not inserted:
-                raise ValueError(f"Body at {b.position} failed to be placed in the tree")
+            leaf = self._find_leaf(self.root, b.position)
+            leaf.points.append(b)
 
-        # then compute neighbor and interaction lists
+        # compute neighbor & interaction lists
         self._compute_neighbors()
         self._compute_interactions()
 
-    def _collect_by_level(self):
-        """Creates dictionary of nodes at each level"""
-        levels = {}
-        def _rec(node):
-            levels.setdefault(node.level, []).append(node)
-            for c in node.children:
+    def _uniform_subdivide(self, node: QuadNode, target_depth: int) -> None:
+        if node.level >= target_depth:
+            return
+        node.subdivide()
+        for c in node.children:
+            self._uniform_subdivide(c, target_depth)
+
+    def _find_leaf(self, node: QuadNode, pos: Tuple[float, float]) -> QuadNode:
+        if node.is_leaf():
+            return node
+        for c in node.children:
+            if c.contains(pos):
+                return self._find_leaf(c, pos)
+        raise ValueError(f"Position {pos} not found in any leaf")
+
+    def _collect_by_level(self) -> Dict[int, List[QuadNode]]:
+        levels: Dict[int, List[QuadNode]] = {}
+        def _rec(n: QuadNode):
+            levels.setdefault(n.level, []).append(n)
+            for c in n.children:
                 _rec(c)
         _rec(self.root)
         return levels
 
-    def _is_neighbor(self, a, b):
-        """True if 'a' and 'b' touch or overlap in 2D."""
+    @staticmethod
+    def _is_neighbor(a: QuadNode, b: QuadNode) -> bool:
         return not (
-            a.x_max < b.x_min or a.x_min > b.x_max or
-            a.y_max < b.y_min or a.y_min > b.y_max
+            a.x_max  < b.x_min or
+            a.x_min  > b.x_max or
+            a.y_max  < b.y_min or
+            a.y_min  > b.y_max
         )
 
-    def _compute_neighbors(self):
-        """Populate each node's neighbors with same-level adjacent cells."""
+    def _compute_neighbors(self) -> None:
         levels = self._collect_by_level()
-        for lvl, nodes in levels.items():
+        for nodes in levels.values():
             for node in nodes:
                 node.neighbors.clear()
                 for other in nodes:
                     if other is not node and self._is_neighbor(node, other):
                         node.neighbors.append(other)
 
-    def _compute_interactions(self):
-        """
-        For each non-root node, build interaction list of far-field cells 
-        (i.e. children of parent's neighbors that are not themselves direct neighbors).
-        """
-        all_nodes = []
-        def _rec(node):
-            if node is not self.root:
-                all_nodes.append(node)
-            for c in node.children:
+    def _descendants_at_level(self, node: QuadNode, target_level: int) -> List[QuadNode]:
+        if node.level == target_level or node.is_leaf():
+            return [node]
+        result: List[QuadNode] = []
+        for c in node.children:
+            result.extend(self._descendants_at_level(c, target_level))
+        return result
+
+    def _compute_interactions(self) -> None:
+        all_nodes: List[QuadNode] = []
+        def _rec(n: QuadNode):
+            for c in n.children:
+                all_nodes.append(c)
                 _rec(c)
         _rec(self.root)
 
         for node in all_nodes:
             node.interaction_list.clear()
             parent = node.parent
+            if parent is None:
+                continue
+            tgt_lvl = node.level
             for pn in parent.neighbors:
-                candidates = pn.children if pn.children else [pn]
+                candidates = self._descendants_at_level(pn, tgt_lvl)
                 for c in candidates:
-                    if c.level != node.level or c is node:
-                        continue
-                    # only far‐field if they do _not_ touch
-                    if not self._is_neighbor(node, c):
+                    if c is not node and not self._is_neighbor(node, c):
                         node.interaction_list.append(c)

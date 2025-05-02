@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from copy import deepcopy
+
 
 from fmm import Particle, potential
 
@@ -16,12 +18,12 @@ def naive_potential(particles):
                 continue
             # softening
             r = np.hypot(p.x - s.x, p.y - s.y) 
-            phi[i] -= s.q * np.log(r)
+            phi[i] += s.q * np.log(r)
     return phi
 
 def main():
     np.random.seed(42)
-    N = 30
+    N = 100
 
     # generate random particles in [0,1]^2 with random charges
     particles = [
@@ -30,9 +32,10 @@ def main():
                  charge=np.random.randn())
         for _ in range(N)
     ]
+    particlesDS = deepcopy(particles)
 
     # compute "exact" reference
-    phi_ref = naive_potential(particles)
+    phi_ref = naive_potential(particlesDS)
 
     orders = list(range(1, 11))
     errors = []
@@ -60,11 +63,13 @@ def main():
     # plot
     plt.figure(figsize=(6,4))
     plt.plot(orders, errors, 'o-')
-    plt.xlabel('Expansion Order (nterms)')
+    plt.xlabel('Expansion Order')
     plt.ylabel('Relative Error (%)')
-    plt.title('FMM vs Naive Direct: Relative Error vs Expansion Order')
+    #plt.title('FMM vs Naive Direct: Relative Error vs Expansion Order')
     plt.grid(True, linestyle='--', alpha=0.5)
+    plt.yscale('log')
     plt.tight_layout()
+    #plt.savefig('figures/FMMerror.png', dpi=300)
     plt.show()
 
 if __name__ == '__main__':
