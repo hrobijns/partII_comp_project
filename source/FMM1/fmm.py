@@ -27,13 +27,14 @@ class FMM2D:
         xs = [p.x for p in particles]
         ys = [p.y for p in particles]
         boundary = (min(xs), min(ys), max(xs), max(ys))
-        self.tree = QuadTree(self.particles, boundary=boundary, max_points=max_points)
+        self.tree = QuadTree(self.particles, boundary=boundary, max_per_leaf=max_points)
 
     def upward_pass(self):
         """Compute multipole expansions (outer) from leaves up to the root."""
         def recurse(node):
             if node.is_leaf():
-                node.outer = multipole(node.get_points(), center=node.center, nterms=self.nterms)
+                # use node.points instead of get_points()
+                node.outer = multipole(node.points, center=node.center, nterms=self.nterms)
             else:
                 for child in node.children:
                     recurse(child)
@@ -47,13 +48,13 @@ class FMM2D:
         """Compute local expansions (inner) from root down to leaves and evaluate at leaves."""
         root = self.tree.root
         root.inner = np.zeros(self.nterms+1, dtype=complex)
+        
         def recurse(node):
+            print(f"Level {node.level}: neighbors={len(node.neighbors)}, IL={len(node.interaction_list)}")
             if node.parent is not None:
                 # shift parent's local expansion
                 z0 = complex(*node.center) - complex(*node.parent.center)
                 node.inner = L2L(node.parent.inner, z0)
-                print("  #neighbors:", len(node.neighbors))
-                print("  #interaction_list:", len(node.interaction_list))
                 # add contributions from well-separated cells
                 for in_node in node.interaction_list:
                     z1 = complex(*node.center) - complex(*in_node.center)
@@ -68,7 +69,7 @@ class FMM2D:
     def evaluate(self, node):
         """Evaluate potentials for particles in a leaf node."""
         zc = complex(*node.center)
-        for p in node.get_points():
+        for p in node.points:
             z = complex(*p.position)
             # far-field via local expansion
             phi = 0.0
@@ -76,7 +77,7 @@ class FMM2D:
                 phi += coeff * (z - zc)**l
             # near-field via direct computation
             for neighbor in node.neighbors + [node]:
-                for s in neighbor.get_points():
+                for s in neighbor.points:
                     if s is not p:
                         r = distance(p.position, s.position)
                         phi -= s.q * np.log(r)
