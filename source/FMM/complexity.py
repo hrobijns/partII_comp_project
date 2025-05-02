@@ -20,7 +20,7 @@ def time_fmm(N, tree_thresh=2, nterms=5, seed=0):
     return time.perf_counter() - t0
 
 if __name__ == "__main__":
-    Ns = np.linspace(10,5000,10).astype(int).tolist()
+    Ns = np.linspace(10,1000,10).astype(int).tolist()
     seeds = [20, 32, 43, 54, 44]
     
     avg_times = []
