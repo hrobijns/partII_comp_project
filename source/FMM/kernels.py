@@ -20,7 +20,7 @@ def M2M(coeffs, z0):
     # Higher terms
     for l in range(1, n):
         total = 0+0j
-        # sum k = 1..ℓ of M_child[k] * binom(ℓ-1, k-1) * z0^(ℓ-k)
+        # sum k = 1..l of M_child[k] * binom(l-1, k-1) * z0^(l-k)
         for k in range(1, l+1):
             total += coeffs[k] * binom(l-1, k-1) * (z0**(l-k))
         # subtract the log‐shift contribution
@@ -39,14 +39,14 @@ def M2L(coeffs, z0):
            + sum(coeffs[k] / z0**k for k in range(1, n))
 
     # higher orders
-    for ell in range(1, n):
-        # sum over k=1..n-1 of M_k * binom(k+ell-1, ell) / z0^(k+ell)
+    for l in range(1, n):
+        # sum over k=1..n-1 of M_k * binom(k+l-1, l) / z0^(k+l)
         s = sum(
-            coeffs[k] * binom(k + ell - 1, ell) / z0**(k + ell)
+            coeffs[k] * binom(k + l - 1, l) / z0**(k + l)
             for k in range(1, n)
         )
-        # combine with monopole, multiply overall (-1)^ell
-        L[ell] = (-1)**ell * (s - coeffs[0] / (ell * z0**ell))
+        # combine with monopole, multiply overall (-1)^l
+        L[l] = (-1)**l * (s - coeffs[0] / (l * z0**l))
 
     return L
 
@@ -55,12 +55,12 @@ def L2L(coeffs, z0):
     n = len(coeffs)
     shifted = np.empty(n, dtype=complex)
 
-    for ell in range(n):
+    for l in range(n):
         s = 0+0j
-        # sum k=ell..n-1 of coeffs[k] * binom(k, ell) * z0^(k-ell)
-        for k in range(ell, n):
-            s += coeffs[k] * binom(k, ell) * (z0)**(k-ell)
-        shifted[ell] = s
+        # sum k=l..n-1 of coeffs[k] * binom(k, l) * z0^(k-l)
+        for k in range(l, n):
+            s += coeffs[k] * binom(k, l) * (z0)**(k-l)
+        shifted[l] = s
 
     return shifted
 

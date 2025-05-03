@@ -68,7 +68,7 @@ def benchmark_naive(N, seeds, n_steps=10):
 def main():
     seeds    = [0, 1, 2, 3, 4]
     n_steps  = 10
-    N_values = np.linspace(10, 1000, 12, dtype=int)
+    N_values = np.linspace(10, 500, 12, dtype=int)
 
     # storage for timing & memory stats
     vec_time_means, vec_time_stds = [], []
@@ -114,14 +114,14 @@ def main():
     print(df.to_string(index=False))
 
     # save to CSV
-    out_csv = 'data/naive.csv'
-    df.to_csv(out_csv, index=False)
-    print(f"\nSaved results to {out_csv}")
+    #out_csv = 'data/naive.csv'
+    #df.to_csv(out_csv, index=False)
+    #print(f"\nSaved results to {out_csv}")
 
-    # Plot only the vectorised timing
+    # Plot only the non-vectorised timing
     plt.figure(figsize=(8,5))
     plt.errorbar(
-        N_values, vec_time_means, yerr=vec_time_stds,
+        N_values, naive_time_means, yerr=naive_time_stds,
         fmt='o-', capsize=4
     )
     plt.title(f"Average time for {n_steps} steps")
