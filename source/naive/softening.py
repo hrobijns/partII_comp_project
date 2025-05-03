@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
+import imageio
 
 class Simulation:
     """
@@ -149,11 +150,11 @@ def main():
         for s in softenings
     ]
 
-    anim = MultiAnimation(sims, softenings, dt, steps=steps, interval=15)
+    anim = MultiAnimation(sims, softenings, dt, steps=steps, interval=3)
     #writer = FFMpegWriter(fps=60, codec='h264')
     #anim.ani.save("figures/simulation.mp4", writer=writer)
 
-    writer = PillowWriter(fps=120000)  
+    writer = PillowWriter(fps=300)  
     anim.ani.save("figures/softening.gif", writer=writer)
 
     anim.show()
