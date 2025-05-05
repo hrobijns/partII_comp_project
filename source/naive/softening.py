@@ -53,8 +53,7 @@ class Simulation:
                 U += self.k * self.charge[i] * self.charge[j] * np.log(r_soft)
         return U
 
-    def total_energy(self):
-        return self.kinetic_energy() + self.potential_energy()
+    d
 
 
 class MultiAnimation:

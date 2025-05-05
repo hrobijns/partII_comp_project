@@ -66,7 +66,7 @@ def main():
     plt.xlabel('Expansion Order')
     plt.ylabel('Relative Error (%)')
     #plt.title('FMM vs Naive Direct: Relative Error vs Expansion Order')
-    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.grid(True)
     plt.yscale('log')
     plt.tight_layout()
     #plt.savefig('figures/FMMerror.png', dpi=300)

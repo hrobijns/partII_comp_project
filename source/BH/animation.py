@@ -7,18 +7,18 @@ from quadtree import k, soft, dt, theta
 
 
 class Animation:
-    def __init__(self, bodies, simulation, steps=500, interval=20):
+    def __init__(self, bodies, simulation, steps=500, interval=30):
         self.bodies     = bodies
         self.sim        = simulation
         self.steps      = steps
         self.interval   = interval
         self.fig, self.ax = plt.subplots(figsize=(6,6))
-        self.ax.set_facecolor('black')
+        self.ax.set_facecolor('white')
         self.ax.set_xticks([]); self.ax.set_yticks([])
-        self.ax.set_xlim(-space_size, space_size)
-        self.ax.set_ylim(-space_size, space_size)
+        self.ax.set_xlim(-3, 3)
+        self.ax.set_ylim(-3, 3)
         self.scat = [
-            self.ax.plot([], [], 'wo', markersize=3+3*np.log10(abs(b.charge)+1e-3))[0]
+            self.ax.plot([], [], 'bo', markersize=2)[0]
             for b in bodies
         ]
         self.ani = FuncAnimation(
@@ -38,14 +38,15 @@ class Animation:
 # --- Example usage ---
 if __name__ == "__main__":
     np.random.seed(42)
-    n = 50
-    space_size = 5.0
+    n = 200
+    space_size = 1
 
     bodies = []
     for _ in range(n):
         pos = np.random.uniform(-space_size, space_size, 2)
         vel = np.random.uniform(-0.1, 0.1, 2)
-        q   = np.random.choice([-1, 1]) * np.random.rand()
+        # Set all charges to 1
+        q = 1.0
         bodies.append(Body(pos, vel, charge=q, mass=1.0))
 
     sim  = Simulation(bodies, space_size=space_size, theta=theta)

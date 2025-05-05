@@ -127,7 +127,7 @@ if __name__ == '__main__':
     charge = np.random.uniform(-1,1,N)
     mass   = np.random.uniform(0.5,1.5,N)
 
-    # prepare Verlet sim
+    # prepare kick-drift sim
     sim_v = SimulationVectorised(pos0.copy(), vel0.copy(), charge, mass)
     sim_v.compute_forces()
 
@@ -138,4 +138,5 @@ if __name__ == '__main__':
     )
     #anim.show()
 
-    anim.save('figures/integration.mp4', fps=100)
+    anim.save('figures/integration.mp4', fps=100) 
+    # N.B .mp4 file converted to GIF for report

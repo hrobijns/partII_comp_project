@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from quadtree import k, soft
 from simulation import Simulation, Body
 
-
 def compute_total_energy(bodies):
     """
     Compute total energy (kinetic + potential) of the system.
@@ -98,7 +97,7 @@ def main():
     plt.xlim(0,1000)
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('figures/theta_energy.png', dpi=300)
+    #plt.savefig('figures/theta_energy.png', dpi=300)
     plt.show()
 
 if __name__ == '__main__':

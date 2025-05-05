@@ -22,6 +22,8 @@ class QuadNode:
         self.interaction_list: List[QuadNode] = [] # same-level non-adjacent cells
         self.outer = None   # multipole expansion
         self.inner = None   # local (Taylor) expansion
+        self.fx = 0.0
+        self.fy = 0.0
 
     def is_leaf(self) -> bool:
         return not self.children

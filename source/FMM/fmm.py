@@ -105,4 +105,3 @@ def potential(particles, tree_thresh=2, nterms=5):
     """
     fmm = FMM2D(particles, max_points=tree_thresh, nterms=nterms)
     return fmm.compute()
-
