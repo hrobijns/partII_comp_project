@@ -2,7 +2,7 @@ import numpy as np
 from quadtree import QuadTree
 from kernels import multipole, M2M, M2L, L2L
 
-def distance(p1, p2, soft=1e-6):
+def distance(p1, p2, soft=1e-3):
     """Softened distance between two points"""
     dx = p1[0] - p2[0]
     dy = p1[1] - p2[1]
@@ -36,7 +36,6 @@ class FMM2D:
         """Compute multipole expansions (outer) from leaves up to the root."""
         def recurse(node):
             if node.is_leaf():
-                # use node.points instead of get_points()
                 node.outer = multipole(node.points, center=node.center, nterms=self.nterms)
             else:
                 for child in node.children:
@@ -53,7 +52,6 @@ class FMM2D:
         root.inner = np.zeros(self.nterms+1, dtype=complex)
         
         def recurse(node):
-            #print(f"Level {node.level}: neighbors={len(node.neighbors)}, IL={len(node.interaction_list)}")
             if node.parent is not None:
                 # shift parent's local expansion
                 z0 = complex(*node.center) - complex(*node.parent.center)

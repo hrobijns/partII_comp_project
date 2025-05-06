@@ -1,14 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
-import imageio
 
 class Simulation:
-    """
-    2D N‐body simulation with an attractive logarithmic potential:
-        U = k * sum_{i<j} q_i q_j * log(r_ij_soft)
-        F_i = -∇_i U = -k * sum_{j!=i} q_i q_j * (r_i - r_j) / (r_ij_soft^2)
-    """
+    """2D logarithmic simulation with ATTRACTIVE potential (to encourage close passes)"""
     def __init__(self, pos, vel, charge, mass=1.0, k=1.0, soft=0.1):
         self.pos    = pos.copy()      # shape (N,2)
         self.vel    = vel.copy()      # shape (N,2)
@@ -29,13 +24,13 @@ class Simulation:
                 diff   = self.pos[i] - self.pos[j]
                 r2     = np.dot(diff, diff)
                 r_soft = np.sqrt(r2 + self.soft**2)
-                # Attractive force toward each other
+                # ATTRACTIVE FORCE
                 f = - self.k * self.charge[i] * self.charge[j] * diff / (r_soft**2)
                 self.force[i] += f
                 self.force[j] -= f
 
     def step(self, dt):
-        # velocity Verlet integrator
+        # kick-step-kick 
         self.vel += 0.5 * (self.force / self.mass) * dt
         self.pos += self.vel * dt
         self.compute_forces()
@@ -52,14 +47,14 @@ class Simulation:
                 r_soft = np.sqrt(np.dot(diff, diff) + self.soft**2)
                 U += self.k * self.charge[i] * self.charge[j] * np.log(r_soft)
         return U
-
-    d
-
+    
+    def total_energy(self):
+        return self.kinetic_energy() + self.potential_energy()
 
 class MultiAnimation:
     """
-    Left: scatter of one simulation (first soften value).
-    Right: evolving %ΔE curves for all softenings, plotted vs. step number.
+    left: simulation of the bodies
+    right: energy plot for the different softening parameters
     """
     def __init__(self, sims, softenings, dt, steps=200, interval=50,
                  xlim=(-2,2), ylim=(-2,2)):
@@ -68,17 +63,17 @@ class MultiAnimation:
         self.dt        = dt
         self.steps     = steps
 
-        # history array: percent ΔE for each sim at each step
+        # y-axis: energy history array 
         self.Ehist     = np.zeros((len(sims), steps))
-        # x‐axis = step index
+        # x‐axis: steps
         self.steps_idx = np.arange(steps)
 
-        # Set up figure with two subplots side by side
+        # two subplots side by side
         self.fig, (self.ax_sim, self.ax_E) = plt.subplots(
             1, 2, figsize=(10,5), gridspec_kw={'width_ratios':[1,1.2]}
         )
 
-        # --- Left: particle scatter ---
+        # left plot
         self.ax_sim.set_xlim(*xlim)
         self.ax_sim.set_ylim(*ylim)
         self.ax_sim.set_xticks([]); self.ax_sim.set_yticks([])
@@ -86,41 +81,37 @@ class MultiAnimation:
             sims[0].pos[:,0], sims[0].pos[:,1], s=20, c='blue'
         )
 
-        # --- Right: energy drift plot ---
-        # create one line per softening
+        # right plot
         self.lines = []
         for s in self.soft:
             line, = self.ax_E.plot([], [], label=f"ε={s}")
             self.lines.append(line)
 
-        # horizontal reference line at ΔE = 0
         self.ax_E.axhline(0.0, color='black', linestyle=':')
 
-        # configure axes
         self.ax_E.set_xlim(0, self.steps - 1)
-        self.ax_E.set_ylim(-5, 5)      # adjust to your expected drift range
+        self.ax_E.set_ylim(-5, 5)    
         self.ax_E.set_xlabel("step")
         self.ax_E.set_ylabel("% ΔE")
         self.ax_E.legend(loc='upper right')
         self.ax_E.grid(True)
 
-        # set up animation
         self.ani = FuncAnimation(
             self.fig, self.update, frames=self.steps,
             interval=interval, blit=False
         )
 
     def update(self, frame):
-        # advance each sim one step and record its %ΔE
+        # advance each simulation one step and record its energy change
         for i, sim in enumerate(self.sims):
             sim.step(self.dt)
             Ei = sim.total_energy()
             self.Ehist[i, frame] = (Ei - sim.E0) / sim.E0 * 100
 
-        # update particle positions for the first sim
+        # update particle positions for the first simulation
         self.scat.set_offsets(self.sims[0].pos)
 
-        # update each ΔE curve (x = step index)
+        # update energy curve
         for i, line in enumerate(self.lines):
             line.set_data(self.steps_idx[:frame+1], self.Ehist[i, :frame+1])
 
@@ -133,7 +124,7 @@ class MultiAnimation:
 
 def main():
     np.random.seed(3)
-    N         = 3
+    N         = 3 # chose three bodies to clearly visualise close passes
     dt        = 0.01
     steps     = 301
 
@@ -151,11 +142,9 @@ def main():
 
     anim = MultiAnimation(sims, softenings, dt, steps=steps, interval=3)
     writer = FFMpegWriter(fps=60, codec='h264')
-    anim.ani.save("figures/simulation.mp4", writer=writer)
-
+    #anim.ani.save("figures/simulation.mp4", writer=writer)
+    # N.B it was changed to a .gif using an online converter for the report
     
-    anim.ani.save("figures/softening.gif", writer=writer)
-
     anim.show()
 
 
