@@ -61,18 +61,19 @@ def benchmark_one_step(N_values, seeds, space_size, theta_value):
 
 def main():
     # build sample N values
-    lin = np.linspace(10, 1000, 10, dtype=int)[1:-1]
-    explicit = np.array([10, 100, 1000], dtype=int)
-    N_values = np.unique(np.concatenate([lin, explicit]))
+    #lin = np.linspace(10, 1000, 10, dtype=int)[1:-1]
+    #explicit = np.array([10, 100, 1000], dtype=int)
+    #N_values = np.unique(np.concatenate([lin, explicit]))
+    N_values = [10,100,1000,10000,100000]
 
-    seeds      = [10, 41, 42, 55, 44]
+    seeds      = [10, 41, 42]
     space_size = 5
-    theta_val  = 0.3
+    theta_val  = 0.5
 
     df = benchmark_one_step(N_values, seeds, space_size, theta_val)
 
     # save to CSV
-    df.to_csv('data/BH1.csv', index=False)
+    #df.to_csv('data/BH1.csv', index=False)
     # print("\n► Saved results to benchmark_one_step.csv")
 
 if __name__ == '__main__':

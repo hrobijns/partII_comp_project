@@ -66,9 +66,10 @@ def benchmark_naive(N, seeds, n_steps=10):
     return np.array(times), np.array(memories)
 
 def main():
-    seeds    = [0, 1, 2, 3, 4]
-    n_steps  = 10
+    seeds    = [3, 45, 1]
+    n_steps  = 1
     N_values = np.linspace(10, 500, 12, dtype=int)
+    N_values = [10,100,1000,10000,100000]
 
     # storage for timing & memory stats
     vec_time_means, vec_time_stds = [], []
@@ -78,23 +79,23 @@ def main():
 
     for N in N_values:
         vec_times,   vec_mems   = benchmark_vectorised(N, seeds, n_steps)
-        naive_times, naive_mems = benchmark_naive(N, seeds, n_steps)
+        #naive_times, naive_mems = benchmark_naive(N, seeds, n_steps)
 
         vec_time_means.append(vec_times.mean())
         vec_time_stds.append(vec_times.std(ddof=1))
         vec_mem_means.append(vec_mems.mean())
         vec_mem_stds.append(vec_mems.std(ddof=1))
 
-        naive_time_means.append(naive_times.mean())
-        naive_time_stds.append(naive_times.std(ddof=1))
-        naive_mem_means.append(naive_mems.mean())
-        naive_mem_stds.append(naive_mems.std(ddof=1))
+        #naive_time_means.append(naive_times.mean())
+        #naive_time_stds.append(naive_times.std(ddof=1))
+        #naive_mem_means.append(naive_mems.mean())
+        #naive_mem_stds.append(naive_mems.std(ddof=1))
 
         print(
             f"N={N:4d}  vec: {vec_times.mean():.4f}s ±{vec_times.std(ddof=1):.4f}s, "
             f"{vec_mems.mean():.2f} MB ±{vec_mems.std(ddof=1):.2f} MB  |  "
-            f"naive: {naive_times.mean():.4f}s ±{naive_times.std(ddof=1):.4f}s, "
-            f"{naive_mems.mean():.2f} MB ±{naive_mems.std(ddof=1):.2f} MB"
+        #    f"naive: {naive_times.mean():.4f}s ±{naive_times.std(ddof=1):.4f}s, "
+        #    f"{naive_mems.mean():.2f} MB ±{naive_mems.std(ddof=1):.2f} MB"
         )
 
     # assemble results into a DataFrame
@@ -104,10 +105,10 @@ def main():
         'vector_time_std':  vec_time_stds,
         'vector_mem_mean':  vec_mem_means,
         'vector_mem_std':   vec_mem_stds,
-        'naive_time_mean':  naive_time_means,
-        'naive_time_std':   naive_time_stds,
-        'naive_mem_mean':   naive_mem_means,
-        'naive_mem_std':    naive_mem_stds,
+    #    'naive_time_mean':  naive_time_means,
+    #    'naive_time_std':   naive_time_stds,
+    #    'naive_mem_mean':   naive_mem_means,
+    #    'naive_mem_std':    naive_mem_stds,
     })
 
     print("\nFinal benchmark results:")
@@ -120,10 +121,10 @@ def main():
 
     # Plot only the non-vectorised timing
     plt.figure(figsize=(8,5))
-    plt.errorbar(
-        N_values, naive_time_means, yerr=naive_time_stds,
-        fmt='o-', capsize=4
-    )
+    #plt.errorbar(
+    #    N_values, naive_time_means, yerr=naive_time_stds,
+    #    fmt='o-', capsize=4
+    #)
     plt.title(f"Average time for {n_steps} steps")
     plt.xlabel("Number of particles (N)")
     plt.ylabel("Time (seconds)")

@@ -65,15 +65,16 @@ def benchmark_fmm(N_values, seeds, tree_thresh, nterms):
 
 def main():
     # 1) generate 10 linearly spaced values between 10 and 1000
-    base = np.linspace(10, 1000, 10, dtype=int)
+    #base = np.linspace(10, 1000, 10, dtype=int)
     # 2) explicitly include 10, 100, 1000
-    explicit = np.array([10, 100, 1000], dtype=int)
+    #explicit = np.array([10, 100, 1000], dtype=int)
     # 3) merge and dedupe, then sort
-    N_values = np.unique(np.concatenate([base, explicit]))
+    #N_values = np.unique(np.concatenate([base, explicit]))
+    N_values = [10,100,1000,10000,100000]
 
-    seeds      = [10, 41, 42, 55, 44]
+    seeds      = [10, 41, 42]
     tree_thresh = 15
-    nterms      = 5
+    nterms      = 3
 
     df = benchmark_fmm(N_values, seeds, tree_thresh, nterms)
 

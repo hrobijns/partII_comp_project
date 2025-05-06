@@ -2,7 +2,7 @@ import numpy as np
 
 k = 1.0      # Coulomb constant (in appropriate simulation units)
 soft = 0.1   # softening length
-dt = 0.01    # time step 
+dt = 0.05    # time step 
 
 class Body:
     """
@@ -108,7 +108,7 @@ class SimulationVectorised:
         self.force = np.sum(Fmat, axis=1)
 
     def step(self):
-        """ kick-drift-kick as above """
+        """ kick-drift-kick as before """
         self.vel += 0.5 * (self.force / self.mass[:, None]) * dt # (1)
         self.pos += self.vel * dt # (2)
         self.compute_forces() # (3)
