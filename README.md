@@ -1,4 +1,7 @@
-This repository contains an implementation of Barnes-Hut and FMM algorithms for N-body simulation, for the Part II Physics Computing Project coursework. The structure of the repo is detailed below:
+This repository contains an implementation of Barnes-Hut and FMM algorithms for N-body simulation, for the Part II Physics Computing Project coursework. 
+_________
+### Structure of the repository:
+
 
 - report.ipynb: the main report, a write-up of the project.
 
