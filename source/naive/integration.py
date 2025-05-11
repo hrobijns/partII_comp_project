@@ -120,7 +120,7 @@ class ComparisonAnimation:
 
 if __name__ == '__main__':
     # -- initialize --
-    N = 75
+    N = 25
     np.random.seed(38)
     pos0   = np.random.uniform(-2,2,(N,2))
     vel0   = np.random.normal(0,0.1,(N,2))
@@ -136,7 +136,7 @@ if __name__ == '__main__':
         sim_v, pos0, vel0, charge, mass, dt,
         steps=500, xlim=(-2,2), ylim=(-2,2), interval=5
     )
-    #anim.show()
+    anim.show()
 
-    anim.save('figures/integration.mp4', fps=100) 
+    #anim.save('figures/integration.mp4', fps=100) 
     # N.B .mp4 file converted to GIF for report

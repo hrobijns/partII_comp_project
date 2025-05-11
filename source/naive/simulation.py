@@ -2,7 +2,7 @@ import numpy as np
 
 k = 1.0      # Coulomb constant (in appropriate simulation units)
 soft = 0.1   # softening length
-dt = 0.05    # time step 
+dt = 0.005    # time step 
 
 class Body:
     """
