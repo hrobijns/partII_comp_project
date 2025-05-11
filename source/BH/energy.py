@@ -90,14 +90,14 @@ def main():
     # Reference line at zero change
     plt.axhline(0.0, color='black', linestyle='--')
 
-    plt.xlabel('Steps')
-    plt.ylabel('Percentage Total Energy Change of System (%)')
+    plt.xlabel('Steps', fontsize = 14)
+    plt.ylabel('Percentage Total Energy Change of System (%)', fontsize = 14)
     #plt.title('Energy Conservation vs. Time for Different Theta')
-    plt.legend()
+    plt.legend(fontsize = 12)
     plt.xlim(0,1000)
     plt.grid(True)
     plt.tight_layout()
-    #plt.savefig('figures/theta_energy.png', dpi=300)
+    plt.savefig('figures/theta_energy.png', dpi=300)
     plt.show()
 
 if __name__ == '__main__':

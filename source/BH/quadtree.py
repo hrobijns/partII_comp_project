@@ -2,7 +2,7 @@ import numpy as np
 
 k = 1.0      # Coulomb constant (in appropriate simulation units)
 soft = 1.0   # softening length
-dt = 0.001    # time step 
+dt = 0.0001    # time step 
 theta = 0.5  # theta
 
 class QuadTree:

@@ -49,9 +49,8 @@ def main():
     # Plot results with error bars
     plt.figure(figsize=(8, 6))
     plt.errorbar(theta_values, avg_times, yerr=std_times, fmt='o-', capsize=5)
-    plt.xlabel(r'$\theta$')  
-    plt.ylabel('Computation time per step (s)')
-    #plt.title('Barnes-Hut Computation Time vs Theta')
+    plt.xlabel(r'$\theta$', fontsize = 14)  
+    plt.ylabel('Computation time per step (s)', fontsize = 14)
     plt.grid(True)
     plt.tight_layout()
     plt.savefig('figures/theta.png', dpi=300)
